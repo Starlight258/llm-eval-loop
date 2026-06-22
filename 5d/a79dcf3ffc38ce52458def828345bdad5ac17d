@@ -1,0 +1,29 @@
+requirements.txt
+  s_d3f23fb43b822b::t_d19cb34d08f17d 1-4
+README.md
+  s_d3f23fb43b822b::t_a03d2c7e6445a3 5,17-29
+Dockerfile
+  s_d3f23fb43b822b::t_d19cb34d08f17d 1-17
+docker-compose.yml
+  s_d3f23fb43b822b::t_d19cb34d08f17d 1-39
+pyproject.toml
+  s_d3f23fb43b822b::t_4e75581a14d367 5
+.dockerignore
+  s_d3f23fb43b822b::t_d19cb34d08f17d 1-10
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.9",
+  "base_commit_sha": "5da79dcf3ffc38ce52458def828345bdad5ac17d",
+  "prompts": {},
+  "sessions": {
+    "s_d3f23fb43b822b": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019eeed2-4c48-7571-80ae-0de6caf6f81e",
+        "model": "gpt-5.4-mini"
+      },
+      "human_author": "Mint <audwl03071@gmail.com>"
+    }
+  }
+}
