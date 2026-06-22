@@ -1,11 +1,9 @@
 from __future__ import annotations
 
-from dataclasses import asdict
-
 from core.evaluation_agent import EvaluationAgent
 from core.generator import ReportGenerator
-from core.prompt_loader import build_prompt_document
 from core.prompt_optimizer import PromptOptimizer
+from core.runtime import RuntimeConfig, build_services
 from core.schemas import EvaluationRunRecord, LoopResult, MockMetricData, PromptDocument, PromptVersionRecord
 from storage.db import EvaluationStore
 
@@ -18,10 +16,12 @@ def run_evaluation_loop(
     initial_prompt: PromptDocument,
     store: EvaluationStore,
     *,
+    runtime: RuntimeConfig | None = None,
     max_iterations: int = MAX_LOOP_ITERATIONS,
 ) -> LoopResult:
-    generator = ReportGenerator()
-    judge = EvaluationAgent()
+    services = build_services(runtime or RuntimeConfig(backend="heuristic"))
+    generator = services.generator
+    judge = services.evaluator
     optimizer = PromptOptimizer()
     current_prompt = initial_prompt
     prompt_history: list[PromptVersionRecord] = []
@@ -87,5 +87,5 @@ def run_evaluation_loop(
         runs=runs,
         prompt_history=prompt_history,
         stopped_reason=stopped_reason,
-        human_review_notes=human_review_notes,
+        human_review_notes=f"{human_review_notes} Backend: {services.backend_label}.",
     )

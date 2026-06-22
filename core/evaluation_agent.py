@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import json
 import re
 from dataclasses import dataclass
 from statistics import mean
 
+from core.llm_client import OllamaClient
 from core.schemas import EvaluationResult, EvaluationScores, MockMetricData
 
 STRONG_WORDS = {
@@ -124,7 +126,15 @@ def _readability_score(report_text: str) -> float:
 
 @dataclass
 class EvaluationAgent:
+    llm_client: OllamaClient | None = None
+    model_name: str = "qwen3.6"
+
     def evaluate(self, metric: MockMetricData, report_text: str) -> EvaluationResult:
+        if self.llm_client is not None:
+            try:
+                return self._evaluate_with_llm(metric, report_text)
+            except Exception:
+                pass
         sentences = _sentences(report_text)
         groundedness = _groundedness_score(metric, report_text)
         appropriateness = _appropriateness_score(metric, sentences)
@@ -184,3 +194,55 @@ class EvaluationAgent:
             suggestions.append("Tighten long bullets and keep the markdown structure shallow.")
         return suggestions
 
+    def _evaluate_with_llm(self, metric: MockMetricData, report_text: str) -> EvaluationResult:
+        system = (
+            "You are a strict evaluator for Markdown analyst reports. "
+            "Score only, do not rewrite the report. Return JSON only."
+        )
+        user = (
+            "Evaluate the report using these rubric fields:\n"
+            "- groundedness_score\n"
+            "- appropriateness_score\n"
+            "- calibration_score\n"
+            "- consistency_score\n"
+            "- readability_score\n\n"
+            "Return a JSON object with these keys:\n"
+            "{"
+            '"groundedness_score": number, '
+            '"appropriateness_score": number, '
+            '"calibration_score": number, '
+            '"consistency_score": number, '
+            '"readability_score": number, '
+            '"failed_sentences": [string], '
+            '"judge_feedback": string, '
+            '"improvement_suggestions": [string]'
+            "}\n\n"
+            f"Source data:\n{json.dumps(metric.__dict__, ensure_ascii=False, indent=2)}\n\n"
+            f"Report:\n{report_text}\n"
+            "All scores must be between 1 and 5."
+        )
+        raw = self.llm_client.chat(system=system, user=user)
+        payload = self._parse_json_payload(raw)
+        scores = EvaluationScores(
+            groundedness_score=payload["groundedness_score"],
+            appropriateness_score=payload["appropriateness_score"],
+            calibration_score=payload["calibration_score"],
+            consistency_score=payload["consistency_score"],
+            readability_score=payload["readability_score"],
+        )
+        return EvaluationResult(
+            scores=scores,
+            failed_sentences=list(payload.get("failed_sentences", [])),
+            judge_feedback=str(payload.get("judge_feedback", "")),
+            improvement_suggestions=[str(item) for item in payload.get("improvement_suggestions", [])],
+        )
+
+    def _parse_json_payload(self, text: str) -> dict:
+        candidate = text.strip()
+        if candidate.startswith("```"):
+            candidate = candidate.strip("`")
+        start = candidate.find("{")
+        end = candidate.rfind("}")
+        if start == -1 or end == -1 or end <= start:
+            raise ValueError("LLM response did not contain JSON")
+        return json.loads(candidate[start : end + 1])

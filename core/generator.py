@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import json
 from statistics import mean
 
+from core.llm_client import OllamaClient
 from core.schemas import MockMetricData, PromptDocument, PromptSpec
 
 
@@ -54,8 +56,16 @@ def _tone_prefix(spec: PromptSpec) -> str:
 
 @dataclass
 class ReportGenerator:
+    llm_client: OllamaClient | None = None
+    model_name: str = "qwen3.6"
+
     def generate(self, metric: MockMetricData, prompt: PromptDocument | PromptSpec) -> str:
         spec = prompt.spec if isinstance(prompt, PromptDocument) else prompt
+        if self.llm_client is not None:
+            try:
+                return self._generate_with_llm(metric, spec)
+            except Exception:
+                pass
         change_direction = _direction_word(metric.wow)
         trend = _trend_label(metric.trend_7d)
         caution = _caution_phrase(spec)
@@ -111,3 +121,20 @@ class ReportGenerator:
         lines.extend(watchouts[: spec.max_bullets])
         return "\n".join(lines).rstrip() + "\n"
 
+    def _generate_with_llm(self, metric: MockMetricData, spec: PromptSpec) -> str:
+        system = (
+            "You write compact analyst reports in Markdown. "
+            "Use only the provided data. Do not add unsupported causal claims."
+        )
+        user = (
+            f"Prompt spec:\n{json.dumps(spec.__dict__, ensure_ascii=False, indent=2)}\n\n"
+            f"Metric data:\n{json.dumps(metric.__dict__, ensure_ascii=False, indent=2)}\n\n"
+            "Write a Markdown report with these sections exactly:\n"
+            "1. # title\n"
+            "2. ## Snapshot with bullets for domain, current, previous, DoD, WoW, and 4W average\n"
+            "3. ## Interpretation with 2 to 4 sentences\n"
+            "4. ## Breakdown with bullets for any provided breakdowns\n"
+            "5. ## Watchouts with 1 to 3 bullets\n"
+            "Stay grounded, keep the wording cautious when the movement is modest, and keep the whole report short."
+        )
+        return self.llm_client.chat(system=system, user=user)
