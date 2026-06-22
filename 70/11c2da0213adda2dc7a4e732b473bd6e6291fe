@@ -1,0 +1,24 @@
+README.md
+  s_d3f23fb43b822b::t_a374d479e005cc 3,5-6,8,10,12-17,19,22,24-31,33-35,37-111,113-114,117-123,126-134
+  s_d3f23fb43b822b::t_c42a8b2cbe28fd 20,36,112,115-116,124-125
+docker-compose.yml
+  s_d3f23fb43b822b::t_127b2230b8e5cb 7,13-14,21,27-28
+dashboard/streamlit_app.py
+  s_d3f23fb43b822b::t_139de9a98c9ee2 52
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.9",
+  "base_commit_sha": "7011c2da0213adda2dc7a4e732b473bd6e6291fe",
+  "prompts": {},
+  "sessions": {
+    "s_d3f23fb43b822b": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019eeed2-4c48-7571-80ae-0de6caf6f81e",
+        "model": "gpt-5.4-mini"
+      },
+      "human_author": "Mint <audwl03071@gmail.com>"
+    }
+  }
+}
