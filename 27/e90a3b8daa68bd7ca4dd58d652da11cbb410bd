@@ -1,0 +1,22 @@
+dashboard/streamlit_app.py
+  s_d3f23fb43b822b::t_c4cf0278b60a3a 3-4,13-16,19-21,29-46,48-76,79,92
+app/main.py
+  s_d3f23fb43b822b::t_3f51e5af37acf9 70,72,84,90
+  s_d3f23fb43b822b::t_c4cf0278b60a3a 4,37,44,47,68-69,71,73-78,85
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.9",
+  "base_commit_sha": "27e90a3b8daa68bd7ca4dd58d652da11cbb410bd",
+  "prompts": {},
+  "sessions": {
+    "s_d3f23fb43b822b": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019eeed2-4c48-7571-80ae-0de6caf6f81e",
+        "model": "gpt-5.4-mini"
+      },
+      "human_author": "Mint <audwl03071@gmail.com>"
+    }
+  }
+}
