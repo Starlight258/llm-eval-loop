@@ -1,0 +1,39 @@
+README.md
+  s_d3f23fb43b822b::t_9655aa2f249329 1-16
+pyproject.toml
+  s_d3f23fb43b822b::t_9655aa2f249329 1-9
+DESIGN.md
+  s_11fe06445e5b62::t_3637d8f1f516de 1-109,111-116,131-141,151-155,158,165-222,224-247,250-253
+  s_11fe06445e5b62::t_35955839a9f19e 156-157,159-162,164
+  s_11fe06445e5b62::t_83b615af8feb38 110
+  s_11fe06445e5b62::t_b327ac014454a0 223
+  s_11fe06445e5b62::t_a435f8a7c9b96d 249
+  s_11fe06445e5b62::t_a1df69f4f47bc0 117-130
+  s_11fe06445e5b62::t_9bdcf74582fd26 248
+  s_11fe06445e5b62::t_3bc8f2869b7149 163
+  s_11fe06445e5b62::t_b9b0e704b50ed5 142-150
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.9",
+  "base_commit_sha": "6e12e90deca84ca9ef486c8367f2ffd559ac5d29",
+  "prompts": {},
+  "sessions": {
+    "s_11fe06445e5b62": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "b8984618-0f13-4f98-948a-11178325148b",
+        "model": "unknown"
+      },
+      "human_author": "Mint <audwl03071@gmail.com>"
+    },
+    "s_d3f23fb43b822b": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019eeed2-4c48-7571-80ae-0de6caf6f81e",
+        "model": "gpt-5.4-mini"
+      },
+      "human_author": "Mint <audwl03071@gmail.com>"
+    }
+  }
+}
