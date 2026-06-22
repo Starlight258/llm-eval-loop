@@ -1,0 +1,39 @@
+services:
+  ollama:
+    image: ollama/ollama:latest
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama:/root/.ollama
+
+  api:
+    build: .
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000
+    environment:
+      EVAL_LOOP_BACKEND: ollama
+      OLLAMA_BASE_URL: http://ollama:11434
+      OLLAMA_MODEL: qwen3.6
+      OLLAMA_NUM_CTX: "8192"
+      OLLAMA_TEMPERATURE: "0.2"
+    ports:
+      - "8000:8000"
+    depends_on:
+      - ollama
+
+  dashboard:
+    build: .
+    command: streamlit run dashboard/streamlit_app.py --server.address 0.0.0.0 --server.port 8501
+    environment:
+      EVAL_LOOP_BACKEND: ollama
+      OLLAMA_BASE_URL: http://ollama:11434
+      OLLAMA_MODEL: qwen3.6
+      OLLAMA_NUM_CTX: "8192"
+      OLLAMA_TEMPERATURE: "0.2"
+    ports:
+      - "8501:8501"
+    depends_on:
+      - ollama
+
+volumes:
+  ollama:
+

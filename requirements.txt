@@ -1,0 +1,4 @@
+fastapi>=0.115,<1
+streamlit>=1.37,<2
+uvicorn[standard]>=0.30,<1
+
