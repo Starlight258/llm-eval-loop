@@ -1,0 +1,20 @@
+{
+  "domain": "App Engagement",
+  "metric_name": "daily_active_users",
+  "current": 1845000,
+  "previous": 1812000,
+  "dod": 1.8,
+  "wow": 4.9,
+  "avg_4w": 1760000,
+  "trend_7d": [0.5, 1.2, 1.8, 2.4, 1.9],
+  "breakdowns": {
+    "platform": {
+      "android": 2.2,
+      "ios": 1.4,
+      "web": 0.9
+    }
+  },
+  "description": "Daily engagement across platforms",
+  "unit": "users"
+}
+

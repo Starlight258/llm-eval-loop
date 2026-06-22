@@ -1,0 +1,20 @@
+{
+  "domain": "Signup Funnel",
+  "metric_name": "signup_completion_rate",
+  "current": 31.4,
+  "previous": 32.1,
+  "dod": -0.7,
+  "wow": -1.9,
+  "avg_4w": 33.2,
+  "trend_7d": [-0.2, -0.3, -0.5, -0.8, -1.0],
+  "breakdowns": {
+    "step": {
+      "email_verification": -0.5,
+      "profile_setup": -0.9,
+      "first_session": -1.4
+    }
+  },
+  "description": "Signup funnel completion rate",
+  "unit": "percent"
+}
+

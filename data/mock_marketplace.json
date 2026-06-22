@@ -1,0 +1,19 @@
+{
+  "domain": "Marketplace",
+  "metric_name": "listing_count",
+  "current": 572000,
+  "previous": 584000,
+  "dod": -2.0,
+  "wow": -5.2,
+  "avg_4w": 618000,
+  "trend_7d": [-0.4, -0.8, -1.2, -1.7, -2.0],
+  "breakdowns": {
+    "platform": {
+      "android": -2.5,
+      "ios": -0.8
+    }
+  },
+  "description": "Marketplace listings over the last week",
+  "unit": "count"
+}
+
