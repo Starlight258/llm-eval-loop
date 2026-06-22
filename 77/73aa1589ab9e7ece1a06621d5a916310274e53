@@ -1,0 +1,25 @@
+dashboard/streamlit_app.py
+  s_d3f23fb43b822b::t_9655aa2f249329 1-42
+dashboard/__init__.py
+  s_d3f23fb43b822b::t_9655aa2f249329 1-2
+app/main.py
+  s_d3f23fb43b822b::t_9655aa2f249329 1-78
+app/__init__.py
+  s_d3f23fb43b822b::t_9655aa2f249329 1-2
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.9",
+  "base_commit_sha": "7773aa1589ab9e7ece1a06621d5a916310274e53",
+  "prompts": {},
+  "sessions": {
+    "s_d3f23fb43b822b": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019eeed2-4c48-7571-80ae-0de6caf6f81e",
+        "model": "gpt-5.4-mini"
+      },
+      "human_author": "Mint <audwl03071@gmail.com>"
+    }
+  }
+}
