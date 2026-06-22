@@ -1,0 +1,30 @@
+storage/models.py
+  s_d3f23fb43b822b::t_9655aa2f249329 1-32
+storage/__init__.py
+  s_d3f23fb43b822b::t_9655aa2f249329 1-2
+tests/test_prompt_optimizer.py
+  s_d3f23fb43b822b::t_9655aa2f249329 1-33
+core/prompt_optimizer.py
+  s_d3f23fb43b822b::t_9655aa2f249329 1-45
+storage/db.py
+  s_d3f23fb43b822b::t_9655aa2f249329 1-173
+core/loop.py
+  s_d3f23fb43b822b::t_9655aa2f249329 1-74,78-83,85-91
+  s_d3f23fb43b822b::t_4ca3dd1f9c2e82 75-77,84
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.9",
+  "base_commit_sha": "969dcedeb149da1135315ecd71a0af788e395b42",
+  "prompts": {},
+  "sessions": {
+    "s_d3f23fb43b822b": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019eeed2-4c48-7571-80ae-0de6caf6f81e",
+        "model": "gpt-5.4-mini"
+      },
+      "human_author": "Mint <audwl03071@gmail.com>"
+    }
+  }
+}
