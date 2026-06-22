@@ -49,7 +49,7 @@ def main() -> None:
         metric = MockMetricData(**json.loads((DATA_DIR / f"{dataset_id}.json").read_text()))
         prompt = load_prompt_document(PROMPT_DIR / "generator_v1.yaml")
         result = run_evaluation_loop(dataset_id, metric, prompt, store, runtime=runtime)
-        st.success(f"Completed {len(result.runs)} run(s) with backend {result.human_review_notes}")
+        st.success(f"Completed {len(result.runs)} run(s) with backend {runtime.normalized_backend()}")
         st.metric("Final score", f"{result.final_run.overall_score:.3f}")
         st.metric("Best score", f"{result.best_run.overall_score:.3f}")
         st.write("### Runs")
