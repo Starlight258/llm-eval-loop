@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 
 try:
@@ -33,15 +34,17 @@ except ImportError:  # pragma: no cover - fallback for minimal environments
 
 from core.loop import run_evaluation_loop
 from core.prompt_loader import load_prompt_document
+from core.runtime import RuntimeConfig, build_services
 from core.schemas import MockMetricData
 from storage.db import EvaluationStore
 
 BASE_DIR = Path(__file__).resolve().parents[1]
 DATA_DIR = BASE_DIR / "data"
 PROMPT_DIR = BASE_DIR / "prompts"
-DB_PATH = BASE_DIR / "storage" / "evaluation.sqlite"
+DB_PATH = Path(os.getenv("EVAL_DB_PATH", str(BASE_DIR / "storage" / "evaluation.sqlite")))
 
 app = FastAPI(title="LLM Report Evaluation Loop")
+RUNTIME_CONFIG = RuntimeConfig.from_env()
 
 
 def load_metric(dataset_id: str) -> MockMetricData:
@@ -62,17 +65,29 @@ def datasets() -> list[str]:
     return sorted(path.stem for path in DATA_DIR.glob("*.json"))
 
 
+@app.get("/runtime")
+def runtime() -> dict[str, object]:
+    runtime_services = build_services(RUNTIME_CONFIG)
+    return {
+        "backend": runtime_services.backend_label,
+        "model": RUNTIME_CONFIG.model_name,
+        "ollama_base_url": RUNTIME_CONFIG.ollama_base_url,
+        "num_ctx": RUNTIME_CONFIG.num_ctx,
+    }
+
+
 @app.post("/run/{dataset_id}")
 def run_dataset(dataset_id: str) -> dict[str, object]:
     metric = load_metric(dataset_id)
     prompt = load_prompt_document(PROMPT_DIR / "generator_v1.yaml")
     store = EvaluationStore(DB_PATH)
-    result = run_evaluation_loop(dataset_id, metric, prompt, store)
+    runtime_services = build_services(RUNTIME_CONFIG)
+    result = run_evaluation_loop(dataset_id, metric, prompt, store, runtime=RUNTIME_CONFIG)
     return {
         "dataset_id": result.dataset_id,
         "stopped_reason": result.stopped_reason,
         "final_prompt_version": result.final_prompt_version,
+        "backend": runtime_services.backend_label,
         "best_score": result.best_run.overall_score,
         "runs": [run.__dict__ for run in result.runs],
     }
-
