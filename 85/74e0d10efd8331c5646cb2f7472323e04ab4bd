@@ -1,0 +1,31 @@
+data/mock_signup_funnel.json
+  s_d3f23fb43b822b::t_9655aa2f249329 1-20
+prompts/generator_v1.yaml
+  s_d3f23fb43b822b::t_9655aa2f249329 1-15
+prompts/judge.yaml
+  s_d3f23fb43b822b::t_9655aa2f249329 1-11
+prompts/generator_v2.yaml
+  s_d3f23fb43b822b::t_9655aa2f249329 1-15
+prompts/optimizer.yaml
+  s_d3f23fb43b822b::t_9655aa2f249329 1-11
+data/mock_marketplace.json
+  s_d3f23fb43b822b::t_9655aa2f249329 1-19
+data/mock_engagement.json
+  s_d3f23fb43b822b::t_9655aa2f249329 1-20
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.9",
+  "base_commit_sha": "8574e0d10efd8331c5646cb2f7472323e04ab4bd",
+  "prompts": {},
+  "sessions": {
+    "s_d3f23fb43b822b": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019eeed2-4c48-7571-80ae-0de6caf6f81e",
+        "model": "gpt-5.4-mini"
+      },
+      "human_author": "Mint <audwl03071@gmail.com>"
+    }
+  }
+}
