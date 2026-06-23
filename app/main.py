@@ -73,6 +73,8 @@ def runtime() -> dict[str, object]:
         "model": RUNTIME_CONFIG.model_name,
         "ollama_base_url": RUNTIME_CONFIG.ollama_base_url,
         "num_ctx": RUNTIME_CONFIG.num_ctx,
+        "max_runtime_seconds": RUNTIME_CONFIG.max_runtime_seconds,
+        "max_total_tokens": RUNTIME_CONFIG.max_total_tokens,
     }
 
 
@@ -89,5 +91,8 @@ def run_dataset(dataset_id: str) -> dict[str, object]:
         "final_prompt_version": result.final_prompt_version,
         "backend": runtime_services.backend_label,
         "best_score": result.best_run.overall_score,
+        "acceptance_passed": result.acceptance_passed,
+        "elapsed_seconds": result.elapsed_seconds,
+        "total_tokens": result.total_prompt_tokens + result.total_completion_tokens,
         "runs": [run.__dict__ for run in result.runs],
     }

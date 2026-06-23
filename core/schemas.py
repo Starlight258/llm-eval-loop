@@ -140,6 +140,11 @@ class LoopResult:
     best_run: EvaluationRunRecord
     runs: list[EvaluationRunRecord]
     prompt_history: list[PromptVersionRecord]
+    acceptance_passed: bool
+    acceptance_checks: list[str]
+    acceptance_failures: list[str]
+    elapsed_seconds: float
+    total_prompt_tokens: int
+    total_completion_tokens: int
     stopped_reason: str
     human_review_notes: str
-

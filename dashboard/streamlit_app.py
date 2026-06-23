@@ -39,12 +39,28 @@ def main() -> None:
     )
     num_ctx = st.sidebar.number_input("Context", min_value=1024, max_value=131072, value=int(os.getenv("OLLAMA_NUM_CTX", "4096")), step=1024)
     temperature = st.sidebar.number_input("Temperature", min_value=0.0, max_value=1.0, value=float(os.getenv("OLLAMA_TEMPERATURE", "0.2")), step=0.05)
+    max_runtime_seconds = st.sidebar.number_input(
+        "Max runtime (s)",
+        min_value=30.0,
+        max_value=7200.0,
+        value=float(os.getenv("EVAL_LOOP_MAX_RUNTIME_SECONDS", "300")),
+        step=30.0,
+    )
+    max_total_tokens = st.sidebar.number_input(
+        "Max tokens",
+        min_value=1000,
+        max_value=1000000,
+        value=int(os.getenv("EVAL_LOOP_MAX_TOTAL_TOKENS", "12000")),
+        step=1000,
+    )
     runtime = RuntimeConfig(
         backend=backend,
         model_name=model_name,
         ollama_base_url=ollama_base_url,
         num_ctx=int(num_ctx),
         temperature=float(temperature),
+        max_runtime_seconds=float(max_runtime_seconds),
+        max_total_tokens=int(max_total_tokens),
     )
     dataset_id = st.selectbox("Dataset", sorted(path.stem for path in DATA_DIR.glob("*.json")))
     run_clicked = st.button("Run evaluation")
@@ -58,6 +74,8 @@ def main() -> None:
         st.success(f"Completed {len(result.runs)} run(s) with backend {runtime.normalized_backend()}")
         st.metric("Latest score", f"{latest_run.overall_score:.3f}")
         st.metric("Best score", f"{result.best_run.overall_score:.3f}")
+        st.metric("Tokens used", f"{result.total_prompt_tokens + result.total_completion_tokens}")
+        st.metric("Elapsed seconds", f"{result.elapsed_seconds:.1f}")
         st.write("### Runs")
         st.dataframe(
             [
@@ -73,6 +91,11 @@ def main() -> None:
                 for run in result.runs
             ]
         )
+        st.write("### Acceptance checklist")
+        st.write(result.acceptance_checks)
+        if result.acceptance_failures:
+            st.write("### Acceptance failures")
+            st.write(result.acceptance_failures)
         st.write("### Latest report")
         st.code(latest_run.report_text, language="markdown")
         st.write("### Best report")
@@ -97,6 +120,8 @@ def main() -> None:
             for run in runs
         ]
     )
+    st.write("### Prompt history")
+    st.dataframe(store.list_prompt_versions())
 
 
 if __name__ == "__main__":

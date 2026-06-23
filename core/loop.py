@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from time import monotonic
+
 from core.evaluation_agent import EvaluationAgent
 from core.generator import ReportGenerator
 from core.prompt_optimizer import PromptOptimizer
@@ -8,6 +10,53 @@ from core.schemas import EvaluationRunRecord, LoopResult, MockMetricData, Prompt
 from storage.db import EvaluationStore
 
 MAX_LOOP_ITERATIONS = 3
+
+ACCEPTANCE_SCORE_THRESHOLD = 4.5
+REQUIRED_SECTIONS = ("## Snapshot", "## Interpretation", "## Breakdown", "## Watchouts")
+
+
+def _has_required_sections(report_text: str) -> bool:
+    return all(section in report_text for section in REQUIRED_SECTIONS)
+
+
+def _evaluate_acceptance(report_text: str, evaluation) -> tuple[bool, list[str], list[str]]:
+    checks = [
+        f"overall_score >= {ACCEPTANCE_SCORE_THRESHOLD:.1f}",
+        f"groundedness_score >= {ACCEPTANCE_SCORE_THRESHOLD:.1f}",
+        f"appropriateness_score >= {ACCEPTANCE_SCORE_THRESHOLD:.1f}",
+        f"calibration_score >= {ACCEPTANCE_SCORE_THRESHOLD:.1f}",
+        f"consistency_score >= {ACCEPTANCE_SCORE_THRESHOLD:.1f}",
+        f"readability_score >= {ACCEPTANCE_SCORE_THRESHOLD:.1f}",
+        "report includes required sections",
+        "judge found no failed sentences",
+    ]
+    failures: list[str] = []
+    if evaluation.overall_score < ACCEPTANCE_SCORE_THRESHOLD:
+        failures.append("overall score below threshold")
+    if evaluation.scores.groundedness_score < ACCEPTANCE_SCORE_THRESHOLD:
+        failures.append("groundedness below threshold")
+    if evaluation.scores.appropriateness_score < ACCEPTANCE_SCORE_THRESHOLD:
+        failures.append("appropriateness below threshold")
+    if evaluation.scores.calibration_score < ACCEPTANCE_SCORE_THRESHOLD:
+        failures.append("calibration below threshold")
+    if evaluation.scores.consistency_score < ACCEPTANCE_SCORE_THRESHOLD:
+        failures.append("consistency below threshold")
+    if evaluation.scores.readability_score < ACCEPTANCE_SCORE_THRESHOLD:
+        failures.append("readability below threshold")
+    if not _has_required_sections(report_text):
+        failures.append("required sections missing")
+    if evaluation.failed_sentences:
+        failures.append("judge reported failed sentences")
+    return (not failures), checks, failures
+
+
+def _record_usage(usage, *, total_prompt_tokens: int, total_completion_tokens: int) -> tuple[int, int]:
+    if usage is None:
+        return total_prompt_tokens, total_completion_tokens
+    return (
+        total_prompt_tokens + usage.prompt_tokens,
+        total_completion_tokens + usage.completion_tokens,
+    )
 
 
 def run_evaluation_loop(
@@ -29,8 +78,18 @@ def run_evaluation_loop(
     runs: list[EvaluationRunRecord] = []
     best_run: EvaluationRunRecord | None = None
     stopped_reason = "max_iterations_reached"
+    total_prompt_tokens = 0
+    total_completion_tokens = 0
+    started_at = monotonic()
+    acceptance_passed = False
+    acceptance_checks: list[str] = []
+    acceptance_failures: list[str] = []
 
     for iteration in range(max_iterations):
+        if runtime is not None and runtime.max_runtime_seconds > 0:
+            if monotonic() - started_at >= runtime.max_runtime_seconds:
+                stopped_reason = "runtime_budget_exceeded"
+                break
         prompt_history.append(
             PromptVersionRecord(
                 prompt_version=current_prompt.prompt_version,
@@ -41,8 +100,26 @@ def run_evaluation_loop(
                 bad_example=current_prompt.spec.bad_example,
             )
         )
+        store.save_prompt_version(
+            prompt_version=current_prompt.prompt_version,
+            label=current_prompt.label,
+            prompt_text=current_prompt.raw_text,
+            applied_rules=current_prompt.spec.instructions,
+            good_example=current_prompt.spec.good_example,
+            bad_example=current_prompt.spec.bad_example,
+        )
         report_text = generator.generate(metric, current_prompt)
+        total_prompt_tokens, total_completion_tokens = _record_usage(
+            getattr(generator, "last_usage", None),
+            total_prompt_tokens=total_prompt_tokens,
+            total_completion_tokens=total_completion_tokens,
+        )
         evaluation = judge.evaluate(metric, report_text)
+        total_prompt_tokens, total_completion_tokens = _record_usage(
+            getattr(judge, "last_usage", None),
+            total_prompt_tokens=total_prompt_tokens,
+            total_completion_tokens=total_completion_tokens,
+        )
         run = store.save_evaluation_run(
             dataset_id=dataset_id,
             prompt_version=current_prompt.prompt_version,
@@ -52,6 +129,19 @@ def run_evaluation_loop(
         runs.append(run)
         if best_run is None or run.overall_score >= best_run.overall_score:
             best_run = run
+
+        acceptance_passed, acceptance_checks, acceptance_failures = _evaluate_acceptance(report_text, evaluation)
+        if runtime is not None and runtime.max_total_tokens > 0:
+            if total_prompt_tokens + total_completion_tokens >= runtime.max_total_tokens:
+                stopped_reason = "token_budget_exceeded"
+                break
+        if runtime is not None and runtime.max_runtime_seconds > 0:
+            if monotonic() - started_at >= runtime.max_runtime_seconds:
+                stopped_reason = "runtime_budget_exceeded"
+                break
+        if acceptance_passed:
+            stopped_reason = "passed_acceptance_criteria"
+            break
 
         if iteration == max_iterations - 1:
             break
@@ -65,13 +155,20 @@ def run_evaluation_loop(
 
     if best_run is None:
         raise RuntimeError("evaluation loop did not produce any runs")
-    if len(runs) >= 2 and runs[-1].overall_score < runs[-2].overall_score:
+    if stopped_reason == "max_iterations_reached" and len(runs) >= 2 and runs[-1].overall_score < runs[-2].overall_score:
         stopped_reason = "score_declined"
     final_run = runs[-1]
+    elapsed_seconds = monotonic() - started_at
     human_review_notes = (
         f"Review {len(runs)} stored runs for dataset {dataset_id}. "
         f"Compare prompt versions {', '.join(record.prompt_version for record in prompt_history)}."
     )
+    if acceptance_passed:
+        human_review_notes += " Acceptance checklist passed."
+    if stopped_reason == "runtime_budget_exceeded":
+        human_review_notes += " Stopped because the runtime budget was exceeded."
+    if stopped_reason == "token_budget_exceeded":
+        human_review_notes += " Stopped because the token budget was exceeded."
     return LoopResult(
         dataset_id=dataset_id,
         final_prompt_version=final_run.prompt_version,
@@ -79,6 +176,12 @@ def run_evaluation_loop(
         best_run=best_run,
         runs=runs,
         prompt_history=prompt_history,
+        acceptance_passed=acceptance_passed,
+        acceptance_checks=acceptance_checks,
+        acceptance_failures=acceptance_failures,
+        elapsed_seconds=elapsed_seconds,
+        total_prompt_tokens=total_prompt_tokens,
+        total_completion_tokens=total_completion_tokens,
         stopped_reason=stopped_reason,
         human_review_notes=f"{human_review_notes} Backend: {services.backend_label}.",
     )
