@@ -195,7 +195,7 @@ class PromptOptimizerTests(unittest.TestCase):
             self.assertEqual(next_prompt.label, "generator_v2")
             self.assertEqual(next_prompt.spec.tone, "measured")
             self.assertEqual(next_prompt.spec.caution_level, "high")
-            self.assertIn("Keep the sign of WoW and DoD consistent", next_prompt.spec.instructions)
+            self.assertIn("State the change as the delta between current and previous", next_prompt.spec.instructions)
 
 
 if __name__ == "__main__":

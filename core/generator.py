@@ -19,9 +19,9 @@ def _expected_direction(metric: MockMetricData) -> str:
 def _has_direction_mismatch(report_text: str, metric: MockMetricData) -> bool:
     direction = _expected_direction(metric)
     text = report_text.lower()
-    if direction == "up" and any(re.search(rf"\\b{word}\\b", text) for word in {"down", "decline", "decrease", "drop", "softening"}):
+    if direction == "up" and any(re.search(rf"\b{word}\b", text) for word in {"down", "decline", "decrease", "drop", "softening"}):
         return True
-    if direction == "down" and any(re.search(rf"\\b{word}\\b", text) for word in {"up", "increase", "rise", "surge", "growth"}):
+    if direction == "down" and any(re.search(rf"\b{word}\b", text) for word in {"up", "increase", "rise", "surge", "growth"}):
         return True
     return False
 
@@ -29,7 +29,7 @@ def _has_direction_mismatch(report_text: str, metric: MockMetricData) -> bool:
 @dataclass
 class ReportGenerator:
     llm_client: OllamaClient | None = None
-    model_name: str = "llama3.2:3b"
+    model_name: str = "qwen2.5:3b"
     last_usage: OllamaUsage | None = None
 
     def generate(self, metric: MockMetricData, prompt: PromptDocument | PromptSpec) -> str:
@@ -56,6 +56,8 @@ class ReportGenerator:
             "3. ## Interpretation with 2 to 4 sentences\n"
             "4. ## Breakdown with bullets for any provided breakdowns\n"
             "5. ## Watchouts with 1 to 3 bullets\n"
+            "When you describe change, compute the delta from current and previous first and state that delta explicitly. "
+            "Do not use the full current value as the size of the change.\n"
             "Stay grounded, keep the wording cautious when the movement is modest, keep the whole report short, "
             "and never describe a positive WoW/DoD as a decline or a negative WoW/DoD as growth."
         )

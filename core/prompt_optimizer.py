@@ -33,11 +33,11 @@ class PromptOptimizer:
 
         if evaluation.scores.groundedness_score < 4.5 or _contains_direction_failure(evaluation):
             instruction_additions.append(
-                "Keep WoW and DoD aligned with the source data. If the movement is positive, describe it as up or higher; if it is negative, describe it as down or lower. Do not flip the direction."
+                "Keep WoW and DoD aligned with the source data. State the change as the delta between current and previous, not as the absolute current value. If the movement is positive, describe it as up or higher; if it is negative, describe it as down or lower. Do not flip the direction."
             )
-            good_example = "The metric increased week over week, which matches the positive direction in the data."
-            bad_example = "The metric declined week over week even though the source data shows an increase."
-            notes.append("Reinforced direction consistency and exact number usage.")
+            good_example = "The metric increased by 33,000 week over week, which matches the positive direction in the data."
+            bad_example = "The metric increased by 1,845,000 week over week even though the source data only changed by 33,000."
+            notes.append("Reinforced direction consistency and exact delta usage.")
 
         if evaluation.scores.appropriateness_score < 4.5:
             tone = "measured"
