@@ -26,7 +26,7 @@ human feedback가 있으면 baseline 리포트를 먼저 한 번 만들고, 그 
 
 ## 아키텍처
 
-<img width="2760" height="2057" alt="image" src="https://github.com/user-attachments/assets/57354e0a-a8f4-47b7-9b19-37903927c421" />
+<img width="3291" height="2346" alt="image" src="https://github.com/user-attachments/assets/3ba88f55-e172-42ef-8cb5-9485625f7ea9" />
 
 ### 구성 설명
 
