@@ -11,7 +11,7 @@ class OllamaClient:
     base_url: str
     model_name: str
     timeout_seconds: float = 120.0
-    num_ctx: int = 8192
+    num_ctx: int = 4096
     temperature: float = 0.2
 
     def is_available(self) -> bool:
@@ -55,4 +55,3 @@ class OllamaClient:
                 return json.loads(response.read().decode("utf-8"))
         except URLError as exc:  # pragma: no cover - network failure depends on local daemon
             raise ConnectionError(f"failed to reach Ollama at {self.base_url}") from exc
-

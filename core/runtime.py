@@ -11,20 +11,20 @@ from core.llm_client import OllamaClient
 @dataclass(frozen=True)
 class RuntimeConfig:
     backend: str = "auto"
-    model_name: str = "qwen3.6"
+    model_name: str = "llama3.2:3b"
     ollama_base_url: str = "http://127.0.0.1:11434"
     timeout_seconds: float = 120.0
-    num_ctx: int = 8192
+    num_ctx: int = 4096
     temperature: float = 0.2
 
     @classmethod
     def from_env(cls) -> "RuntimeConfig":
         return cls(
             backend=os.getenv("EVAL_LOOP_BACKEND", "auto").strip().lower(),
-            model_name=os.getenv("OLLAMA_MODEL", "qwen3.6").strip(),
+            model_name=os.getenv("OLLAMA_MODEL", "llama3.2:3b").strip(),
             ollama_base_url=os.getenv("OLLAMA_BASE_URL", "http://127.0.0.1:11434").strip(),
             timeout_seconds=float(os.getenv("OLLAMA_TIMEOUT_SECONDS", "120")),
-            num_ctx=int(os.getenv("OLLAMA_NUM_CTX", "8192")),
+            num_ctx=int(os.getenv("OLLAMA_NUM_CTX", "4096")),
             temperature=float(os.getenv("OLLAMA_TEMPERATURE", "0.2")),
         )
 
@@ -63,4 +63,3 @@ def build_services(config: RuntimeConfig | None = None) -> RuntimeServices:
         evaluator=EvaluationAgent(llm_client=client, model_name=config.model_name),
         backend_label=backend_label,
     )
-

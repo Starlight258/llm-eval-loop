@@ -127,7 +127,7 @@ def _readability_score(report_text: str) -> float:
 @dataclass
 class EvaluationAgent:
     llm_client: OllamaClient | None = None
-    model_name: str = "qwen3.6"
+    model_name: str = "llama3.2:3b"
 
     def evaluate(self, metric: MockMetricData, report_text: str) -> EvaluationResult:
         if self.llm_client is not None:
@@ -197,7 +197,8 @@ class EvaluationAgent:
     def _evaluate_with_llm(self, metric: MockMetricData, report_text: str) -> EvaluationResult:
         system = (
             "You are a strict evaluator for Markdown analyst reports. "
-            "Score only, do not rewrite the report. Return JSON only."
+            "Score only, do not rewrite the report. Return JSON only. "
+            "Treat direction mismatches between the report and source data as serious errors."
         )
         user = (
             "Evaluate the report using these rubric fields:\n"

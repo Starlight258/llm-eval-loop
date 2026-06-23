@@ -54,77 +54,101 @@ def _tone_prefix(spec: PromptSpec) -> str:
     return "balanced"
 
 
+def _expected_direction(metric: MockMetricData) -> str:
+    if metric.wow > 0.5:
+        return "up"
+    if metric.wow < -0.5:
+        return "down"
+    return "flat"
+
+
+def _has_direction_mismatch(report_text: str, metric: MockMetricData) -> bool:
+    direction = _expected_direction(metric)
+    text = report_text.lower()
+    if direction == "up" and any(word in text for word in {"down", "decline", "decrease", "drop", "softening"}):
+        return True
+    if direction == "down" and any(word in text for word in {"up", "increase", "rise", "surge", "growth"}):
+        return True
+    return False
+
+
+def _build_heuristic_report(metric: MockMetricData, spec: PromptSpec) -> str:
+    change_direction = _direction_word(metric.wow)
+    trend = _trend_label(metric.trend_7d)
+    caution = _caution_phrase(spec)
+    prefix = _tone_prefix(spec)
+    lines: list[str] = [f"# {metric.metric_name} Report", ""]
+    lines.extend(
+        [
+            "## Snapshot",
+            f"- Domain: {metric.domain}",
+            f"- Current: {_format_number(metric.current)}",
+            f"- Previous: {_format_number(metric.previous)}",
+            f"- DoD: {_format_percent(metric.dod)}",
+            f"- WoW: {_format_percent(metric.wow)}",
+            f"- 4W average: {_format_number(metric.avg_4w)}",
+            "",
+            "## Interpretation",
+        ]
+    )
+    summary = (
+        f"The metric {change_direction} week over week, and the 7-day series looks {trend}. "
+        f"That points to a {prefix} interpretation rather than a strong causal claim."
+    )
+    if spec.caution_level == "low":
+        summary = (
+            f"The metric {change_direction} week over week, and the 7-day series looks {trend}. "
+            f"This supports a direct read on the direction of travel."
+        )
+    elif spec.caution_level == "high":
+        summary = (
+            f"The metric {change_direction} week over week, but the evidence still supports only a cautious directional read. "
+            f"The 7-day series looks {trend}, so the pattern is worth monitoring."
+        )
+    lines.append(summary)
+    lines.append("")
+    lines.append("## Breakdown")
+    if spec.include_breakdowns and metric.breakdowns:
+        for group, values in metric.breakdowns.items():
+            pieces = ", ".join(f"{name} {_format_percent(change)}" for name, change in sorted(values.items()))
+            lines.append(f"- {group}: {pieces}")
+    else:
+        lines.append("- No breakdowns were included in this run.")
+    lines.append("")
+    lines.append("## Watchouts")
+    watchouts = [
+        f"- {caution}",
+    ]
+    if spec.max_bullets > 4:
+        watchouts.append("- Keep the same thresholds across similar metrics so the interpretation stays consistent.")
+    if mean(metric.trend_7d[-3:]) < mean(metric.trend_7d[:3]):
+        watchouts.append("- Recent movement is softer than the earlier part of the window.")
+    lines.extend(watchouts[: spec.max_bullets])
+    return "\n".join(lines).rstrip() + "\n"
+
+
 @dataclass
 class ReportGenerator:
     llm_client: OllamaClient | None = None
-    model_name: str = "qwen3.6"
+    model_name: str = "llama3.2:3b"
 
     def generate(self, metric: MockMetricData, prompt: PromptDocument | PromptSpec) -> str:
         spec = prompt.spec if isinstance(prompt, PromptDocument) else prompt
         if self.llm_client is not None:
             try:
-                return self._generate_with_llm(metric, spec)
+                report = self._generate_with_llm(metric, spec)
+                if _has_direction_mismatch(report, metric):
+                    return _build_heuristic_report(metric, spec)
+                return report
             except Exception:
                 pass
-        change_direction = _direction_word(metric.wow)
-        trend = _trend_label(metric.trend_7d)
-        caution = _caution_phrase(spec)
-        prefix = _tone_prefix(spec)
-        lines: list[str] = [f"# {metric.metric_name} Report", ""]
-        lines.extend(
-            [
-                "## Snapshot",
-                f"- Domain: {metric.domain}",
-                f"- Current: {_format_number(metric.current)}",
-                f"- Previous: {_format_number(metric.previous)}",
-                f"- DoD: {_format_percent(metric.dod)}",
-                f"- WoW: {_format_percent(metric.wow)}",
-                f"- 4W average: {_format_number(metric.avg_4w)}",
-                "",
-                "## Interpretation",
-            ]
-        )
-        summary = (
-            f"The metric {change_direction} week over week, and the 7-day series looks {trend}. "
-            f"That points to a {prefix} interpretation rather than a strong causal claim."
-        )
-        if spec.caution_level == "low":
-            summary = (
-                f"The metric {change_direction} week over week, and the 7-day series looks {trend}. "
-                f"This supports a direct read on the direction of travel."
-            )
-        elif spec.caution_level == "high":
-            summary = (
-                f"The metric {change_direction} week over week, but the evidence still supports only a cautious directional read. "
-                f"The 7-day series looks {trend}, so the pattern is worth monitoring."
-            )
-        lines.append(summary)
-        lines.append("")
-        lines.append("## Breakdown")
-        if spec.include_breakdowns and metric.breakdowns:
-            for group, values in metric.breakdowns.items():
-                pieces = ", ".join(
-                    f"{name} {_format_percent(change)}" for name, change in sorted(values.items())
-                )
-                lines.append(f"- {group}: {pieces}")
-        else:
-            lines.append("- No breakdowns were included in this run.")
-        lines.append("")
-        lines.append("## Watchouts")
-        watchouts = [
-            f"- {caution}",
-        ]
-        if spec.max_bullets > 4:
-            watchouts.append("- Keep the same thresholds across similar metrics so the interpretation stays consistent.")
-        if mean(metric.trend_7d[-3:]) < mean(metric.trend_7d[:3]):
-            watchouts.append("- Recent movement is softer than the earlier part of the window.")
-        lines.extend(watchouts[: spec.max_bullets])
-        return "\n".join(lines).rstrip() + "\n"
+        return _build_heuristic_report(metric, spec)
 
     def _generate_with_llm(self, metric: MockMetricData, spec: PromptSpec) -> str:
         system = (
             "You write compact analyst reports in Markdown. "
-            "Use only the provided data. Do not add unsupported causal claims."
+            "Use only the provided data. Do not add unsupported causal claims. "
+            "Keep the direction of change consistent with the source data."
         )
         user = (
             f"Prompt spec:\n{json.dumps(spec.__dict__, ensure_ascii=False, indent=2)}\n\n"
@@ -135,6 +159,7 @@ class ReportGenerator:
             "3. ## Interpretation with 2 to 4 sentences\n"
             "4. ## Breakdown with bullets for any provided breakdowns\n"
             "5. ## Watchouts with 1 to 3 bullets\n"
-            "Stay grounded, keep the wording cautious when the movement is modest, and keep the whole report short."
+            "Stay grounded, keep the wording cautious when the movement is modest, keep the whole report short, "
+            "and never describe a positive WoW/DoD as a decline or a negative WoW/DoD as growth."
         )
         return self.llm_client.chat(system=system, user=user)

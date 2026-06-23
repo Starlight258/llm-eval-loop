@@ -30,14 +30,6 @@ def run_evaluation_loop(
     stopped_reason = "max_iterations_reached"
 
     for iteration in range(max_iterations):
-        store.save_prompt_version(
-            prompt_version=current_prompt.prompt_version,
-            label=current_prompt.label,
-            prompt_text=current_prompt.raw_text,
-            applied_rules=current_prompt.spec.instructions,
-            good_example=current_prompt.spec.good_example,
-            bad_example=current_prompt.spec.bad_example,
-        )
         prompt_history.append(
             PromptVersionRecord(
                 prompt_version=current_prompt.prompt_version,
@@ -74,7 +66,7 @@ def run_evaluation_loop(
         raise RuntimeError("evaluation loop did not produce any runs")
     if len(runs) >= 2 and runs[-1].overall_score < runs[-2].overall_score:
         stopped_reason = "score_declined"
-    final_run = best_run
+    final_run = runs[-1]
     human_review_notes = (
         f"Review {len(runs)} stored runs for dataset {dataset_id}. "
         f"Compare prompt versions {', '.join(record.prompt_version for record in prompt_history)}."
