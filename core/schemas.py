@@ -136,9 +136,11 @@ class EvaluationRunRecord:
 class LoopResult:
     dataset_id: str
     final_prompt_version: str
+    baseline_run: EvaluationRunRecord
     final_run: EvaluationRunRecord
     best_run: EvaluationRunRecord
     runs: list[EvaluationRunRecord]
+    feedback_runs: list[EvaluationRunRecord]
     prompt_history: list[PromptVersionRecord]
     acceptance_passed: bool
     acceptance_checks: list[str]

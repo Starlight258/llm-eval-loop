@@ -29,48 +29,51 @@ def main() -> None:
     if st is None:
         print("streamlit is not installed")
         return
+    base_runtime = RuntimeConfig.from_env()
     st.title("LLM Report Evaluation Loop")
     st.caption("Run mock datasets through a report generator, rubric judge, and prompt optimizer.")
-    backend = st.sidebar.selectbox("Backend", ["auto", "ollama", "claude"], index=0)
-    model_name = st.sidebar.text_input("Model", value=os.getenv("OLLAMA_MODEL", "qwen2.5:3b"))
+    backend_options = ["auto", "ollama", "claude"]
+    backend_index = backend_options.index(base_runtime.backend) if base_runtime.backend in backend_options else 0
+    backend = st.sidebar.selectbox("Backend", backend_options, index=backend_index)
+    model_name = st.sidebar.text_input("Model", value=base_runtime.model_name)
     ollama_base_url = st.sidebar.text_input(
         "Ollama URL",
-        value=os.getenv("OLLAMA_BASE_URL", "http://127.0.0.1:11434"),
+        value=base_runtime.ollama_base_url,
     )
     anthropic_api_key = st.sidebar.text_input(
         "Anthropic API Key",
-        value=os.getenv("ANTHROPIC_API_KEY", ""),
+        value=base_runtime.anthropic_api_key,
         type="password",
     )
     anthropic_base_url = st.sidebar.text_input(
         "Anthropic URL",
-        value=os.getenv("ANTHROPIC_BASE_URL", "https://api.anthropic.com"),
+        value=base_runtime.anthropic_base_url,
     )
     anthropic_model = st.sidebar.text_input(
         "Claude Model",
-        value=os.getenv("ANTHROPIC_MODEL", "claude-3-5-sonnet-latest"),
+        value=base_runtime.anthropic_model,
     )
-    num_ctx = st.sidebar.number_input("Context", min_value=1024, max_value=131072, value=int(os.getenv("OLLAMA_NUM_CTX", "4096")), step=1024)
-    temperature = st.sidebar.number_input("Temperature", min_value=0.0, max_value=1.0, value=float(os.getenv("OLLAMA_TEMPERATURE", "0.2")), step=0.05)
+    num_ctx = st.sidebar.number_input("Context", min_value=1024, max_value=131072, value=base_runtime.num_ctx, step=1024)
+    temperature = st.sidebar.number_input("Temperature", min_value=0.0, max_value=1.0, value=base_runtime.temperature, step=0.05)
     max_output_tokens = st.sidebar.number_input(
         "Max output tokens",
         min_value=256,
         max_value=32768,
-        value=int(os.getenv("ANTHROPIC_MAX_OUTPUT_TOKENS", "4096")),
+        value=base_runtime.max_output_tokens,
         step=256,
     )
     max_runtime_seconds = st.sidebar.number_input(
         "Max runtime (s)",
         min_value=30.0,
         max_value=7200.0,
-        value=float(os.getenv("EVAL_LOOP_MAX_RUNTIME_SECONDS", "300")),
+        value=base_runtime.max_runtime_seconds,
         step=30.0,
     )
     max_total_tokens = st.sidebar.number_input(
         "Max tokens",
         min_value=1000,
         max_value=1000000,
-        value=int(os.getenv("EVAL_LOOP_MAX_TOTAL_TOKENS", "12000")),
+        value=base_runtime.max_total_tokens,
         step=1000,
     )
     human_feedback = st.text_area(
@@ -113,8 +116,10 @@ def main() -> None:
         else:
             latest_run = result.runs[-1]
             st.success(f"Completed {len(result.runs)} run(s) with backend {runtime.normalized_backend()}")
+            st.metric("Baseline score", f"{result.baseline_run.overall_score:.3f}")
             st.metric("Latest score", f"{latest_run.overall_score:.3f}")
             st.metric("Best score", f"{result.best_run.overall_score:.3f}")
+            st.metric("Feedback rounds", len(result.feedback_runs))
             st.metric("Tokens used", f"{result.total_prompt_tokens + result.total_completion_tokens}")
             st.metric("Elapsed seconds", f"{result.elapsed_seconds:.1f}")
             st.write("### Runs")
@@ -139,6 +144,8 @@ def main() -> None:
                 st.write(result.acceptance_failures)
             st.write("### Latest report")
             st.code(latest_run.report_text, language="markdown")
+            st.write("### Baseline report")
+            st.code(result.baseline_run.report_text, language="markdown")
             st.write("### Best report")
             st.code(result.best_run.report_text, language="markdown")
             st.write("### Judge feedback")

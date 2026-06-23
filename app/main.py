@@ -100,9 +100,11 @@ def run_dataset(dataset_id: str, human_feedback: str = "") -> dict[str, object]:
         "stopped_reason": result.stopped_reason,
         "final_prompt_version": result.final_prompt_version,
         "backend": runtime_services.backend_label,
+        "baseline_score": result.baseline_run.overall_score,
         "best_score": result.best_run.overall_score,
         "acceptance_passed": result.acceptance_passed,
         "elapsed_seconds": result.elapsed_seconds,
         "total_tokens": result.total_prompt_tokens + result.total_completion_tokens,
+        "feedback_rounds": len(result.feedback_runs),
         "runs": [run.__dict__ for run in result.runs],
     }

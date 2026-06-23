@@ -6,10 +6,10 @@ from core.evaluation_agent import EvaluationAgent
 from core.generator import ReportGenerator
 from core.prompt_optimizer import PromptOptimizer
 from core.runtime import RuntimeConfig, RuntimeServices, build_services
-from core.schemas import EvaluationRunRecord, LoopResult, MockMetricData, PromptDocument, PromptVersionRecord
+from core.schemas import EvaluationResult, EvaluationRunRecord, LoopResult, MockMetricData, PromptDocument, PromptVersionRecord
 from storage.db import EvaluationStore
 
-MAX_LOOP_ITERATIONS = 3
+MAX_FEEDBACK_ITERATIONS = 3
 
 ACCEPTANCE_SCORE_THRESHOLD = 4.5
 REQUIRED_SECTIONS = ("## Snapshot", "## Interpretation", "## Breakdown", "## Watchouts")
@@ -67,7 +67,7 @@ def run_evaluation_loop(
     *,
     runtime: RuntimeConfig | None = None,
     services: RuntimeServices | None = None,
-    max_iterations: int = MAX_LOOP_ITERATIONS,
+    max_feedback_iterations: int = MAX_FEEDBACK_ITERATIONS,
     human_feedback: str = "",
 ) -> LoopResult:
     services = services or build_services(runtime or RuntimeConfig())
@@ -77,8 +77,9 @@ def run_evaluation_loop(
     current_prompt = initial_prompt
     prompt_history: list[PromptVersionRecord] = []
     runs: list[EvaluationRunRecord] = []
+    feedback_runs: list[EvaluationRunRecord] = []
     best_run: EvaluationRunRecord | None = None
-    stopped_reason = "max_iterations_reached"
+    stopped_reason = "max_feedback_iterations_reached"
     total_prompt_tokens = 0
     total_completion_tokens = 0
     started_at = monotonic()
@@ -86,30 +87,27 @@ def run_evaluation_loop(
     acceptance_checks: list[str] = []
     acceptance_failures: list[str] = []
 
-    for iteration in range(max_iterations):
-        if runtime is not None and runtime.max_runtime_seconds > 0:
-            if monotonic() - started_at >= runtime.max_runtime_seconds:
-                stopped_reason = "runtime_budget_exceeded"
-                break
+    def _run_single_pass(prompt: PromptDocument, *, loop_feedback: str) -> tuple[EvaluationRunRecord, EvaluationResult]:
+        nonlocal total_prompt_tokens, total_completion_tokens
         prompt_history.append(
             PromptVersionRecord(
-                prompt_version=current_prompt.prompt_version,
-                label=current_prompt.label,
-                prompt_text=current_prompt.raw_text,
-                applied_rules=current_prompt.spec.instructions,
-                good_example=current_prompt.spec.good_example,
-                bad_example=current_prompt.spec.bad_example,
+                prompt_version=prompt.prompt_version,
+                label=prompt.label,
+                prompt_text=prompt.raw_text,
+                applied_rules=prompt.spec.instructions,
+                good_example=prompt.spec.good_example,
+                bad_example=prompt.spec.bad_example,
             )
         )
         store.save_prompt_version(
-            prompt_version=current_prompt.prompt_version,
-            label=current_prompt.label,
-            prompt_text=current_prompt.raw_text,
-            applied_rules=current_prompt.spec.instructions,
-            good_example=current_prompt.spec.good_example,
-            bad_example=current_prompt.spec.bad_example,
+            prompt_version=prompt.prompt_version,
+            label=prompt.label,
+            prompt_text=prompt.raw_text,
+            applied_rules=prompt.spec.instructions,
+            good_example=prompt.spec.good_example,
+            bad_example=prompt.spec.bad_example,
         )
-        report_text = generator.generate(metric, current_prompt, human_feedback=human_feedback)
+        report_text = generator.generate(metric, prompt, human_feedback=loop_feedback)
         total_prompt_tokens, total_completion_tokens = _record_usage(
             getattr(generator, "last_usage", None),
             total_prompt_tokens=total_prompt_tokens,
@@ -123,54 +121,82 @@ def run_evaluation_loop(
         )
         run = store.save_evaluation_run(
             dataset_id=dataset_id,
-            prompt_version=current_prompt.prompt_version,
+            prompt_version=prompt.prompt_version,
             report_text=report_text,
             evaluation=evaluation,
         )
         runs.append(run)
-        if best_run is None or run.overall_score >= best_run.overall_score:
-            best_run = run
+        return run, evaluation
 
-        acceptance_passed, acceptance_checks, acceptance_failures = _evaluate_acceptance(report_text, evaluation)
+    if runtime is not None and runtime.max_runtime_seconds > 0 and monotonic() - started_at >= runtime.max_runtime_seconds:
+        stopped_reason = "runtime_budget_exceeded"
+    else:
+        baseline_run, baseline_evaluation = _run_single_pass(current_prompt, loop_feedback="")
+        acceptance_passed, acceptance_checks, acceptance_failures = _evaluate_acceptance(
+            baseline_run.report_text,
+            baseline_evaluation,
+        )
+        best_run = baseline_run
+        baseline_accepted = acceptance_passed
         if runtime is not None and runtime.max_total_tokens > 0:
             if total_prompt_tokens + total_completion_tokens >= runtime.max_total_tokens:
                 stopped_reason = "token_budget_exceeded"
-                break
-        if runtime is not None and runtime.max_runtime_seconds > 0:
+        if stopped_reason == "max_feedback_iterations_reached" and runtime is not None and runtime.max_runtime_seconds > 0:
             if monotonic() - started_at >= runtime.max_runtime_seconds:
                 stopped_reason = "runtime_budget_exceeded"
-                break
-        if acceptance_passed:
+        if not human_feedback.strip() and baseline_accepted:
             stopped_reason = "passed_acceptance_criteria"
-            break
-
-        if iteration == max_iterations - 1:
-            break
-
-        next_prompt = optimizer.propose_next(
-            current_prompt,
-            evaluation,
-            iteration,
-            human_feedback=human_feedback,
-        )
-        if len(runs) > 0 and iteration >= 0 and len(runs) >= 2:
-            if run.overall_score < runs[-2].overall_score:
-                stopped_reason = "score_declined"
-                break
-        current_prompt = next_prompt
+        elif stopped_reason == "max_feedback_iterations_reached":
+            current_evaluation = baseline_evaluation
+            current_run = baseline_run
+            loop_feedback = human_feedback.strip()
+            for iteration in range(max_feedback_iterations):
+                if runtime is not None and runtime.max_runtime_seconds > 0:
+                    if monotonic() - started_at >= runtime.max_runtime_seconds:
+                        stopped_reason = "runtime_budget_exceeded"
+                        break
+                if runtime is not None and runtime.max_total_tokens > 0:
+                    if total_prompt_tokens + total_completion_tokens >= runtime.max_total_tokens:
+                        stopped_reason = "token_budget_exceeded"
+                        break
+                next_prompt = optimizer.propose_next(
+                    current_prompt,
+                    current_evaluation,
+                    iteration,
+                    human_feedback=loop_feedback,
+                )
+                current_prompt = next_prompt
+                next_run, next_evaluation = _run_single_pass(current_prompt, loop_feedback=loop_feedback)
+                feedback_runs.append(next_run)
+                if best_run is None or next_run.overall_score >= best_run.overall_score:
+                    best_run = next_run
+                acceptance_passed, acceptance_checks, acceptance_failures = _evaluate_acceptance(
+                    next_run.report_text,
+                    next_evaluation,
+                )
+                if next_run.overall_score < current_run.overall_score:
+                    stopped_reason = "score_declined"
+                    break
+                current_run = next_run
+                current_evaluation = next_evaluation
+                if acceptance_passed:
+                    stopped_reason = "passed_acceptance_criteria"
+                    break
 
     if best_run is None:
         raise RuntimeError("evaluation loop did not produce any runs")
-    if stopped_reason == "max_iterations_reached" and len(runs) >= 2 and runs[-1].overall_score < runs[-2].overall_score:
+    if stopped_reason == "max_feedback_iterations_reached" and len(runs) >= 2 and runs[-1].overall_score < runs[-2].overall_score:
         stopped_reason = "score_declined"
     final_run = runs[-1]
     elapsed_seconds = monotonic() - started_at
     human_review_notes = (
-        f"Review {len(runs)} stored runs for dataset {dataset_id}. "
+        f"Review {len(runs)} stored runs for dataset {dataset_id} (baseline + feedback refinements). "
         f"Compare prompt versions {', '.join(record.prompt_version for record in prompt_history)}."
     )
     if human_feedback.strip():
-        human_review_notes += " Human feedback was supplied for the run and used where relevant."
+        human_review_notes += " Human feedback was supplied after the baseline run and used in refinements."
+    if baseline_accepted:
+        human_review_notes += " Baseline run already met the acceptance checklist."
     if acceptance_passed:
         human_review_notes += " Acceptance checklist passed."
     if stopped_reason == "runtime_budget_exceeded":
@@ -180,9 +206,11 @@ def run_evaluation_loop(
     return LoopResult(
         dataset_id=dataset_id,
         final_prompt_version=final_run.prompt_version,
+        baseline_run=runs[0],
         final_run=final_run,
         best_run=best_run,
         runs=runs,
+        feedback_runs=feedback_runs,
         prompt_history=prompt_history,
         acceptance_passed=acceptance_passed,
         acceptance_checks=acceptance_checks,
