@@ -20,7 +20,14 @@ def _contains_direction_failure(evaluation: EvaluationResult) -> bool:
 
 @dataclass
 class PromptOptimizer:
-    def propose_next(self, current: PromptDocument, evaluation: EvaluationResult, iteration: int) -> PromptDocument:
+    def propose_next(
+        self,
+        current: PromptDocument,
+        evaluation: EvaluationResult,
+        iteration: int,
+        *,
+        human_feedback: str = "",
+    ) -> PromptDocument:
         spec = current.spec
         label = f"generator_v{iteration + 2}"
         instruction_additions: list[str] = []
@@ -80,6 +87,12 @@ class PromptOptimizer:
                 "Preserve the current structure and keep the report grounded in the source data."
             )
             notes.append("No major issues detected, so the next version keeps the same approach.")
+
+        if human_feedback.strip():
+            instruction_additions.append(
+                f"Apply this human feedback when it improves the next draft: {human_feedback.strip()}"
+            )
+            notes.append("Incorporated optional human feedback into the next prompt.")
 
         next_spec = update_prompt_spec(
             spec,

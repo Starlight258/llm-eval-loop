@@ -66,16 +66,16 @@ def _numeric_change_mismatch_sentences(report_text: str, metric: MockMetricData)
 def _snapshot_value_mismatch_sentences(report_text: str, metric: MockMetricData) -> list[str]:
     normalized_text = report_text.replace(",", "")
     required_values = [
-        (f"current={metric.current:.0f}", f"{metric.current:.0f}"),
-        (f"previous={metric.previous:.0f}", f"{metric.previous:.0f}"),
-        (f"avg_4w={metric.avg_4w:.0f}", f"{metric.avg_4w:.0f}"),
-        (f"dod={metric.dod:+.1f}%", f"{metric.dod:+.1f}%"),
-        (f"wow={metric.wow:+.1f}%", f"{metric.wow:+.1f}%"),
+        f"{metric.current:.0f}",
+        f"{metric.previous:.0f}",
+        f"{metric.avg_4w:.0f}",
+        f"{metric.dod:+.1f}%",
+        f"{metric.wow:+.1f}%",
     ]
     failed: list[str] = []
-    for label, value in required_values:
-        if value not in normalized_text:
-            failed.append(f"Snapshot value mismatch: missing {label}.")
+    for value in required_values:
+        if value.replace(",", "") not in normalized_text:
+            failed.append(f"Snapshot value mismatch: missing {value}.")
     return failed
 
 

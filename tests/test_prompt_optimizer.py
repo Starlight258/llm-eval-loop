@@ -44,7 +44,7 @@ class PromptOptimizerTests(unittest.TestCase):
             def __init__(self) -> None:
                 self.last_usage = None
 
-            def generate(self, metric: MockMetricData, prompt) -> str:
+            def generate(self, metric: MockMetricData, prompt, *, human_feedback: str = "") -> str:
                 from core.llm_client import OllamaUsage
 
                 self.last_usage = OllamaUsage(prompt_tokens=1, completion_tokens=1)
@@ -102,14 +102,16 @@ class PromptOptimizerTests(unittest.TestCase):
                 store,
                 runtime=RuntimeConfig(max_total_tokens=1),
                 services=services,
+                human_feedback="Prefer a softer tone and one concise watchout.",
             )
             self.assertEqual(result.stopped_reason, "token_budget_exceeded")
             self.assertFalse(result.acceptance_passed)
             self.assertEqual(len(result.runs), 1)
+            self.assertIn("Human feedback was supplied", result.human_review_notes)
 
     def test_loop_keeps_prompt_history_in_memory_and_stops(self) -> None:
         class FakeGenerator:
-            def generate(self, metric: MockMetricData, prompt) -> str:
+            def generate(self, metric: MockMetricData, prompt, *, human_feedback: str = "") -> str:
                 return (
                     "# listing_count Report\n\n"
                     "## Snapshot\n"
@@ -197,6 +199,30 @@ class PromptOptimizerTests(unittest.TestCase):
             self.assertEqual(next_prompt.spec.caution_level, "high")
             self.assertIn("Copy the Snapshot numbers exactly", next_prompt.spec.instructions)
             self.assertIn("State the change as the delta between current and previous", next_prompt.spec.instructions)
+
+    def test_optimizer_uses_optional_human_feedback(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            prompt = load_test_prompt(tmpdir)
+            evaluation = EvaluationResult(
+                scores=EvaluationScores(
+                    groundedness_score=4.8,
+                    appropriateness_score=4.8,
+                    calibration_score=4.8,
+                    consistency_score=4.8,
+                    readability_score=4.8,
+                ),
+                failed_sentences=[],
+                judge_feedback="ok",
+                improvement_suggestions=[],
+            )
+            next_prompt = PromptOptimizer().propose_next(
+                prompt,
+                evaluation,
+                iteration=0,
+                human_feedback="Make the tone less assertive and keep the watchouts to one bullet.",
+            )
+            self.assertIn("Apply this human feedback", next_prompt.spec.instructions)
+            self.assertIn("human feedback", next_prompt.spec.notes.lower())
 
 
 if __name__ == "__main__":

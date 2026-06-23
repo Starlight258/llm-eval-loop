@@ -68,6 +68,7 @@ def run_evaluation_loop(
     runtime: RuntimeConfig | None = None,
     services: RuntimeServices | None = None,
     max_iterations: int = MAX_LOOP_ITERATIONS,
+    human_feedback: str = "",
 ) -> LoopResult:
     services = services or build_services(runtime or RuntimeConfig())
     generator = services.generator
@@ -108,7 +109,7 @@ def run_evaluation_loop(
             good_example=current_prompt.spec.good_example,
             bad_example=current_prompt.spec.bad_example,
         )
-        report_text = generator.generate(metric, current_prompt)
+        report_text = generator.generate(metric, current_prompt, human_feedback=human_feedback)
         total_prompt_tokens, total_completion_tokens = _record_usage(
             getattr(generator, "last_usage", None),
             total_prompt_tokens=total_prompt_tokens,
@@ -146,7 +147,12 @@ def run_evaluation_loop(
         if iteration == max_iterations - 1:
             break
 
-        next_prompt = optimizer.propose_next(current_prompt, evaluation, iteration)
+        next_prompt = optimizer.propose_next(
+            current_prompt,
+            evaluation,
+            iteration,
+            human_feedback=human_feedback,
+        )
         if len(runs) > 0 and iteration >= 0 and len(runs) >= 2:
             if run.overall_score < runs[-2].overall_score:
                 stopped_reason = "score_declined"
@@ -163,6 +169,8 @@ def run_evaluation_loop(
         f"Review {len(runs)} stored runs for dataset {dataset_id}. "
         f"Compare prompt versions {', '.join(record.prompt_version for record in prompt_history)}."
     )
+    if human_feedback.strip():
+        human_review_notes += " Human feedback was supplied for the run and used where relevant."
     if acceptance_passed:
         human_review_notes += " Acceptance checklist passed."
     if stopped_reason == "runtime_budget_exceeded":

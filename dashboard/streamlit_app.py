@@ -31,14 +31,34 @@ def main() -> None:
         return
     st.title("LLM Report Evaluation Loop")
     st.caption("Run mock datasets through a report generator, rubric judge, and prompt optimizer.")
-    backend = st.sidebar.selectbox("Backend", ["auto", "ollama"], index=0)
+    backend = st.sidebar.selectbox("Backend", ["auto", "ollama", "claude"], index=0)
     model_name = st.sidebar.text_input("Model", value=os.getenv("OLLAMA_MODEL", "qwen2.5:3b"))
     ollama_base_url = st.sidebar.text_input(
         "Ollama URL",
         value=os.getenv("OLLAMA_BASE_URL", "http://127.0.0.1:11434"),
     )
+    anthropic_api_key = st.sidebar.text_input(
+        "Anthropic API Key",
+        value=os.getenv("ANTHROPIC_API_KEY", ""),
+        type="password",
+    )
+    anthropic_base_url = st.sidebar.text_input(
+        "Anthropic URL",
+        value=os.getenv("ANTHROPIC_BASE_URL", "https://api.anthropic.com"),
+    )
+    anthropic_model = st.sidebar.text_input(
+        "Claude Model",
+        value=os.getenv("ANTHROPIC_MODEL", "claude-3-5-sonnet-latest"),
+    )
     num_ctx = st.sidebar.number_input("Context", min_value=1024, max_value=131072, value=int(os.getenv("OLLAMA_NUM_CTX", "4096")), step=1024)
     temperature = st.sidebar.number_input("Temperature", min_value=0.0, max_value=1.0, value=float(os.getenv("OLLAMA_TEMPERATURE", "0.2")), step=0.05)
+    max_output_tokens = st.sidebar.number_input(
+        "Max output tokens",
+        min_value=256,
+        max_value=32768,
+        value=int(os.getenv("ANTHROPIC_MAX_OUTPUT_TOKENS", "4096")),
+        step=256,
+    )
     max_runtime_seconds = st.sidebar.number_input(
         "Max runtime (s)",
         min_value=30.0,
@@ -53,12 +73,22 @@ def main() -> None:
         value=int(os.getenv("EVAL_LOOP_MAX_TOTAL_TOKENS", "12000")),
         step=1000,
     )
+    human_feedback = st.text_area(
+        "Human feedback (optional)",
+        value="",
+        placeholder="예: 숫자 표기는 더 명확하게, 톤은 조금 더 신중하게",
+        height=120,
+    )
     runtime = RuntimeConfig(
         backend=backend,
         model_name=model_name,
         ollama_base_url=ollama_base_url,
+        anthropic_api_key=anthropic_api_key,
+        anthropic_base_url=anthropic_base_url,
+        anthropic_model=anthropic_model,
         num_ctx=int(num_ctx),
         temperature=float(temperature),
+        max_output_tokens=int(max_output_tokens),
         max_runtime_seconds=float(max_runtime_seconds),
         max_total_tokens=int(max_total_tokens),
     )
@@ -67,43 +97,54 @@ def main() -> None:
     store = EvaluationStore(DB_PATH)
     result = None
     if run_clicked:
-        metric = MockMetricData(**json.loads((DATA_DIR / f"{dataset_id}.json").read_text()))
-        prompt = load_prompt_document(PROMPT_DIR / "generator_v1.yaml")
-        result = run_evaluation_loop(dataset_id, metric, prompt, store, runtime=runtime)
-        latest_run = result.runs[-1]
-        st.success(f"Completed {len(result.runs)} run(s) with backend {runtime.normalized_backend()}")
-        st.metric("Latest score", f"{latest_run.overall_score:.3f}")
-        st.metric("Best score", f"{result.best_run.overall_score:.3f}")
-        st.metric("Tokens used", f"{result.total_prompt_tokens + result.total_completion_tokens}")
-        st.metric("Elapsed seconds", f"{result.elapsed_seconds:.1f}")
-        st.write("### Runs")
-        st.dataframe(
-            [
-                {
-                    "prompt_version": run.prompt_version,
-                    "overall_score": run.overall_score,
-                    "groundedness": run.groundedness_score,
-                    "appropriateness": run.appropriateness_score,
-                    "calibration": run.calibration_score,
-                    "consistency": run.consistency_score,
-                    "readability": run.readability_score,
-                }
-                for run in result.runs
-            ]
-        )
-        st.write("### Acceptance checklist")
-        st.write(result.acceptance_checks)
-        if result.acceptance_failures:
-            st.write("### Acceptance failures")
-            st.write(result.acceptance_failures)
-        st.write("### Latest report")
-        st.code(latest_run.report_text, language="markdown")
-        st.write("### Best report")
-        st.code(result.best_run.report_text, language="markdown")
-        st.write("### Judge feedback")
-        st.write(latest_run.judge_feedback)
-        st.write("### Review notes")
-        st.write(result.human_review_notes)
+        try:
+            metric = MockMetricData(**json.loads((DATA_DIR / f"{dataset_id}.json").read_text()))
+            prompt = load_prompt_document(PROMPT_DIR / "generator_v1.yaml")
+            result = run_evaluation_loop(
+                dataset_id,
+                metric,
+                prompt,
+                store,
+                runtime=runtime,
+                human_feedback=human_feedback,
+            )
+        except ConnectionError as exc:
+            st.error(str(exc))
+        else:
+            latest_run = result.runs[-1]
+            st.success(f"Completed {len(result.runs)} run(s) with backend {runtime.normalized_backend()}")
+            st.metric("Latest score", f"{latest_run.overall_score:.3f}")
+            st.metric("Best score", f"{result.best_run.overall_score:.3f}")
+            st.metric("Tokens used", f"{result.total_prompt_tokens + result.total_completion_tokens}")
+            st.metric("Elapsed seconds", f"{result.elapsed_seconds:.1f}")
+            st.write("### Runs")
+            st.dataframe(
+                [
+                    {
+                        "prompt_version": run.prompt_version,
+                        "overall_score": run.overall_score,
+                        "groundedness": run.groundedness_score,
+                        "appropriateness": run.appropriateness_score,
+                        "calibration": run.calibration_score,
+                        "consistency": run.consistency_score,
+                        "readability": run.readability_score,
+                    }
+                    for run in result.runs
+                ]
+            )
+            st.write("### Acceptance checklist")
+            st.write(result.acceptance_checks)
+            if result.acceptance_failures:
+                st.write("### Acceptance failures")
+                st.write(result.acceptance_failures)
+            st.write("### Latest report")
+            st.code(latest_run.report_text, language="markdown")
+            st.write("### Best report")
+            st.code(result.best_run.report_text, language="markdown")
+            st.write("### Judge feedback")
+            st.write(latest_run.judge_feedback)
+            st.write("### Review notes")
+            st.write(result.human_review_notes)
 
     runs = store.list_runs()
     st.metric("Stored runs", len(runs))

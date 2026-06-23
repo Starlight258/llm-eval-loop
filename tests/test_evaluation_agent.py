@@ -113,11 +113,22 @@ class EvaluationAgentTests(unittest.TestCase):
                 )
 
         metric = MockMetricData(**json.loads((BASE_DIR / "data/mock_engagement.json").read_text()))
-        with tempfile.TemporaryDirectory() as tmpdir:
-            prompt_path = Path(tmpdir) / "generator_v1.yaml"
-            prompt_path.write_text(PROMPT_TEXT)
-            prompt = load_prompt_document(prompt_path)
-        report = ReportGenerator(llm_client=FakeGenClient()).generate(metric, prompt)
+        report = (
+            "# App Engagement Daily Active Users Report\n\n"
+            "## Snapshot\n"
+            "- Domain: App Engagement\n"
+            "- Current: 1,845,000\n"
+            "- Previous: 1,812,000\n"
+            "- DoD: +1.8%\n"
+            "- WoW: +4.9%\n"
+            "- 4W Average: 1,760,000\n\n"
+            "## Interpretation\n"
+            "The daily active user count has increased by 1,845,000.\n\n"
+            "## Breakdown\n"
+            "- platform: Android +2.2%, iOS +1.4%, Web +0.9%\n\n"
+            "## Watchouts\n"
+            "- Keep monitoring."
+        )
         result = EvaluationAgent(llm_client=FakeJudgeClient()).evaluate(metric, report)
         self.assertLess(result.scores.groundedness_score, 4.5)
         self.assertTrue(any("Numeric change mismatch" in sentence for sentence in result.failed_sentences))
@@ -222,11 +233,22 @@ class EvaluationAgentTests(unittest.TestCase):
                 )
 
         metric = MockMetricData(**json.loads((BASE_DIR / "data/mock_engagement.json").read_text()))
-        with tempfile.TemporaryDirectory() as tmpdir:
-            prompt_path = Path(tmpdir) / "generator_v1.yaml"
-            prompt_path.write_text(PROMPT_TEXT)
-            prompt = load_prompt_document(prompt_path)
-        report = ReportGenerator(llm_client=FakeGenClient()).generate(metric, prompt)
+        report = (
+            "# App Engagement Daily Active Users Report\n\n"
+            "## Snapshot\n"
+            "- Domain: App Engagement\n"
+            "- Current: 184,500 users\n"
+            "- Previous: 181,200 users\n"
+            "- DoD: +1.8%\n"
+            "- WoW: +4.9%\n"
+            "- 4W Average: 176,000 users\n\n"
+            "## Interpretation\n"
+            "The daily active user count has increased by 33,000.\n\n"
+            "## Breakdown\n"
+            "- platform: Android +2.2%, iOS +1.4%, Web +0.9%\n\n"
+            "## Watchouts\n"
+            "- Keep monitoring."
+        )
         result = EvaluationAgent(llm_client=FakeJudgeClient()).evaluate(metric, report)
         self.assertLess(result.scores.groundedness_score, 4.5)
         self.assertTrue(any("Snapshot value mismatch" in sentence for sentence in result.failed_sentences))

@@ -72,19 +72,29 @@ def runtime() -> dict[str, object]:
         "backend": runtime_services.backend_label,
         "model": RUNTIME_CONFIG.model_name,
         "ollama_base_url": RUNTIME_CONFIG.ollama_base_url,
+        "anthropic_base_url": RUNTIME_CONFIG.anthropic_base_url,
+        "anthropic_model": RUNTIME_CONFIG.anthropic_model,
         "num_ctx": RUNTIME_CONFIG.num_ctx,
+        "max_output_tokens": RUNTIME_CONFIG.max_output_tokens,
         "max_runtime_seconds": RUNTIME_CONFIG.max_runtime_seconds,
         "max_total_tokens": RUNTIME_CONFIG.max_total_tokens,
     }
 
 
 @app.post("/run/{dataset_id}")
-def run_dataset(dataset_id: str) -> dict[str, object]:
+def run_dataset(dataset_id: str, human_feedback: str = "") -> dict[str, object]:
     metric = load_metric(dataset_id)
     prompt = load_prompt_document(PROMPT_DIR / "generator_v1.yaml")
     store = EvaluationStore(DB_PATH)
     runtime_services = build_services(RUNTIME_CONFIG)
-    result = run_evaluation_loop(dataset_id, metric, prompt, store, runtime=RUNTIME_CONFIG)
+    result = run_evaluation_loop(
+        dataset_id,
+        metric,
+        prompt,
+        store,
+        runtime=RUNTIME_CONFIG,
+        human_feedback=human_feedback,
+    )
     return {
         "dataset_id": result.dataset_id,
         "stopped_reason": result.stopped_reason,
