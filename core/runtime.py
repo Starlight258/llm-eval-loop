@@ -11,7 +11,7 @@ from core.llm_client import OllamaClient
 @dataclass(frozen=True)
 class RuntimeConfig:
     backend: str = "auto"
-    model_name: str = "llama3.2:3b"
+    model_name: str = "qwen2.5:3b"
     ollama_base_url: str = "http://127.0.0.1:11434"
     timeout_seconds: float = 120.0
     num_ctx: int = 4096
@@ -23,7 +23,7 @@ class RuntimeConfig:
     def from_env(cls) -> "RuntimeConfig":
         return cls(
             backend=os.getenv("EVAL_LOOP_BACKEND", "auto").strip().lower(),
-            model_name=os.getenv("OLLAMA_MODEL", "llama3.2:3b").strip(),
+            model_name=os.getenv("OLLAMA_MODEL", "qwen2.5:3b").strip(),
             ollama_base_url=os.getenv("OLLAMA_BASE_URL", "http://127.0.0.1:11434").strip(),
             timeout_seconds=float(os.getenv("OLLAMA_TIMEOUT_SECONDS", "120")),
             num_ctx=int(os.getenv("OLLAMA_NUM_CTX", "4096")),
