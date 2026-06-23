@@ -40,7 +40,7 @@ from storage.db import EvaluationStore
 
 BASE_DIR = Path(__file__).resolve().parents[1]
 DATA_DIR = BASE_DIR / "data"
-PROMPT_DIR = BASE_DIR / "prompts"
+PROMPT_DIR = Path(os.getenv("EVAL_PROMPT_DIR", str(BASE_DIR / ".local" / "prompts")))
 DB_PATH = Path(os.getenv("EVAL_DB_PATH", str(BASE_DIR / "storage" / "evaluation.sqlite")))
 
 app = FastAPI(title="LLM Report Evaluation Loop")
