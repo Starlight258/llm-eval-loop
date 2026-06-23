@@ -319,6 +319,72 @@ class PromptOptimizerTests(unittest.TestCase):
         self.assertEqual(services.generator.calls[1], "Please soften the tone and keep watchouts shorter.")
         self.assertGreater(result.best_run.overall_score, result.baseline_run.overall_score)
 
+    def test_loop_stops_when_feedback_score_is_equal(self) -> None:
+        class FakeGenerator:
+            def __init__(self) -> None:
+                self.calls: list[str] = []
+
+            def generate(self, metric: MockMetricData, prompt, *, human_feedback: str = "") -> str:
+                self.calls.append(human_feedback)
+                return (
+                    "# listing_count Report\n\n"
+                    "## Snapshot\n"
+                    "- Domain: Marketplace\n"
+                    "- Current: 572,000\n"
+                    "- Previous: 583,000\n"
+                    "- DoD: -2.0%\n"
+                    "- WoW: -2.0%\n"
+                    "- 4W average: 560,000\n\n"
+                    "## Interpretation\n"
+                    "The metric decreased week over week and the trend is downward.\n\n"
+                    "## Breakdown\n"
+                    "- category: books -1.2%, electronics -2.4%\n\n"
+                    "## Watchouts\n"
+                    "- The movement is directional."
+                )
+
+        class FakeEvaluator:
+            def __init__(self) -> None:
+                self.calls = 0
+
+            def evaluate(self, metric: MockMetricData, report: str) -> EvaluationResult:
+                self.calls += 1
+                scores = EvaluationScores(
+                    groundedness_score=4.0,
+                    appropriateness_score=4.0,
+                    calibration_score=4.0,
+                    consistency_score=4.0,
+                    readability_score=4.0,
+                )
+                return EvaluationResult(
+                    scores=scores,
+                    failed_sentences=[],
+                    judge_feedback="ok",
+                    improvement_suggestions=[],
+                )
+
+        services = RuntimeServices(
+            generator=FakeGenerator(),
+            evaluator=FakeEvaluator(),
+            backend_label="ollama:fake",
+        )
+        metric = MockMetricData(**json.loads((BASE_DIR / "data/mock_marketplace.json").read_text()))
+        with tempfile.TemporaryDirectory() as tmpdir:
+            store = EvaluationStore(Path(tmpdir) / "runs.sqlite")
+            prompt = load_test_prompt(tmpdir)
+            result = run_evaluation_loop(
+                "mock_marketplace",
+                metric,
+                prompt,
+                store,
+                services=services,
+                human_feedback="Keep the tone measured.",
+                max_feedback_iterations=3,
+            )
+        self.assertEqual(result.stopped_reason, "score_declined")
+        self.assertEqual(len(result.runs), 2)
+        self.assertEqual(len(result.feedback_runs), 1)
+
 
 if __name__ == "__main__":
     unittest.main()

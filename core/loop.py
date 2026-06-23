@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from time import monotonic
 
 from core.evaluation_agent import EvaluationAgent
@@ -13,6 +14,8 @@ MAX_FEEDBACK_ITERATIONS = 3
 
 ACCEPTANCE_SCORE_THRESHOLD = 4.5
 REQUIRED_SECTIONS = ("## Snapshot", "## Interpretation", "## Breakdown", "## Watchouts")
+
+logger = logging.getLogger(__name__)
 
 
 def _has_required_sections(report_text: str) -> bool:
@@ -71,6 +74,12 @@ def run_evaluation_loop(
     human_feedback: str = "",
 ) -> LoopResult:
     services = services or build_services(runtime or RuntimeConfig())
+    logger.info(
+        "starting evaluation loop dataset=%s backend=%s feedback=%s",
+        dataset_id,
+        services.backend_label,
+        bool(human_feedback.strip()),
+    )
     generator = services.generator
     judge = services.evaluator
     optimizer = PromptOptimizer()
@@ -87,7 +96,12 @@ def run_evaluation_loop(
     acceptance_checks: list[str] = []
     acceptance_failures: list[str] = []
 
-    def _run_single_pass(prompt: PromptDocument, *, loop_feedback: str) -> tuple[EvaluationRunRecord, EvaluationResult]:
+    def _run_single_pass(
+        prompt: PromptDocument,
+        *,
+        loop_feedback: str,
+        phase: str,
+    ) -> tuple[EvaluationRunRecord, EvaluationResult]:
         nonlocal total_prompt_tokens, total_completion_tokens
         prompt_history.append(
             PromptVersionRecord(
@@ -126,12 +140,24 @@ def run_evaluation_loop(
             evaluation=evaluation,
         )
         runs.append(run)
+        logger.info(
+            "completed %s pass dataset=%s prompt=%s overall=%.3f grounded=%.3f app=%.3f cal=%.3f cons=%.3f read=%.3f",
+            phase,
+            dataset_id,
+            prompt.prompt_version,
+            run.overall_score,
+            run.groundedness_score,
+            run.appropriateness_score,
+            run.calibration_score,
+            run.consistency_score,
+            run.readability_score,
+        )
         return run, evaluation
 
     if runtime is not None and runtime.max_runtime_seconds > 0 and monotonic() - started_at >= runtime.max_runtime_seconds:
         stopped_reason = "runtime_budget_exceeded"
     else:
-        baseline_run, baseline_evaluation = _run_single_pass(current_prompt, loop_feedback="")
+        baseline_run, baseline_evaluation = _run_single_pass(current_prompt, loop_feedback="", phase="baseline")
         acceptance_passed, acceptance_checks, acceptance_failures = _evaluate_acceptance(
             baseline_run.report_text,
             baseline_evaluation,
@@ -166,15 +192,26 @@ def run_evaluation_loop(
                     human_feedback=loop_feedback,
                 )
                 current_prompt = next_prompt
-                next_run, next_evaluation = _run_single_pass(current_prompt, loop_feedback=loop_feedback)
+                next_run, next_evaluation = _run_single_pass(
+                    current_prompt,
+                    loop_feedback=loop_feedback,
+                    phase="feedback",
+                )
                 feedback_runs.append(next_run)
+                logger.info(
+                    "feedback round=%s dataset=%s prompt=%s score=%.3f",
+                    iteration + 1,
+                    dataset_id,
+                    next_run.prompt_version,
+                    next_run.overall_score,
+                )
                 if best_run is None or next_run.overall_score >= best_run.overall_score:
                     best_run = next_run
                 acceptance_passed, acceptance_checks, acceptance_failures = _evaluate_acceptance(
                     next_run.report_text,
                     next_evaluation,
                 )
-                if next_run.overall_score < current_run.overall_score:
+                if next_run.overall_score <= current_run.overall_score:
                     stopped_reason = "score_declined"
                     break
                 current_run = next_run
@@ -183,9 +220,19 @@ def run_evaluation_loop(
                     stopped_reason = "passed_acceptance_criteria"
                     break
 
+    logger.info(
+        "finished evaluation loop dataset=%s stopped_reason=%s baseline=%.3f latest=%.3f best=%.3f runs=%s",
+        dataset_id,
+        stopped_reason,
+        runs[0].overall_score,
+        runs[-1].overall_score,
+        best_run.overall_score if best_run is not None else 0.0,
+        len(runs),
+    )
+
     if best_run is None:
         raise RuntimeError("evaluation loop did not produce any runs")
-    if stopped_reason == "max_feedback_iterations_reached" and len(runs) >= 2 and runs[-1].overall_score < runs[-2].overall_score:
+    if stopped_reason == "max_feedback_iterations_reached" and len(runs) >= 2 and runs[-1].overall_score <= runs[-2].overall_score:
         stopped_reason = "score_declined"
     final_run = runs[-1]
     elapsed_seconds = monotonic() - started_at
