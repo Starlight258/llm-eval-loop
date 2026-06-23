@@ -7,6 +7,22 @@ from urllib.request import Request, urlopen
 
 
 @dataclass(frozen=True)
+class OllamaUsage:
+    prompt_tokens: int = 0
+    completion_tokens: int = 0
+
+    @property
+    def total_tokens(self) -> int:
+        return self.prompt_tokens + self.completion_tokens
+
+
+@dataclass(frozen=True)
+class OllamaChatResult:
+    content: str
+    usage: OllamaUsage
+
+
+@dataclass(frozen=True)
 class OllamaClient:
     base_url: str
     model_name: str
@@ -22,6 +38,9 @@ class OllamaClient:
         return True
 
     def chat(self, *, system: str, user: str) -> str:
+        return self.chat_with_usage(system=system, user=user).content
+
+    def chat_with_usage(self, *, system: str, user: str) -> OllamaChatResult:
         payload = {
             "model": self.model_name,
             "messages": [
@@ -39,7 +58,11 @@ class OllamaClient:
         content = message.get("content", "")
         if not isinstance(content, str) or not content.strip():
             raise ValueError("empty response from Ollama")
-        return content.strip()
+        usage = OllamaUsage(
+            prompt_tokens=int(response.get("prompt_eval_count", 0) or 0),
+            completion_tokens=int(response.get("eval_count", 0) or 0),
+        )
+        return OllamaChatResult(content=content.strip(), usage=usage)
 
     def _request_json(self, method: str, path: str, payload: dict | None = None) -> dict:
         url = f"{self.base_url.rstrip('/')}{path}"

@@ -5,7 +5,7 @@ import re
 from dataclasses import dataclass
 from statistics import mean
 
-from core.llm_client import OllamaClient
+from core.llm_client import OllamaChatResult, OllamaClient, OllamaUsage
 from core.schemas import EvaluationResult, EvaluationScores, MockMetricData
 
 STRONG_WORDS = {
@@ -128,6 +128,7 @@ def _readability_score(report_text: str) -> float:
 class EvaluationAgent:
     llm_client: OllamaClient | None = None
     model_name: str = "llama3.2:3b"
+    last_usage: OllamaUsage | None = None
 
     def evaluate(self, metric: MockMetricData, report_text: str) -> EvaluationResult:
         if self.llm_client is None:
@@ -197,7 +198,9 @@ class EvaluationAgent:
             f"Report:\n{report_text}\n"
             "All scores must be between 1 and 5."
         )
-        raw = self.llm_client.chat(system=system, user=user)
+        result = self._chat(system=system, user=user)
+        self.last_usage = result.usage
+        raw = result.content
         payload = self._parse_json_payload(raw)
         scores = EvaluationScores(
             groundedness_score=payload["groundedness_score"],
@@ -212,6 +215,21 @@ class EvaluationAgent:
             judge_feedback=str(payload.get("judge_feedback", "")),
             improvement_suggestions=[str(item) for item in payload.get("improvement_suggestions", [])],
         )
+
+    def _chat(self, *, system: str, user: str) -> OllamaChatResult:
+        if hasattr(self.llm_client, "chat_with_usage"):
+            result = self.llm_client.chat_with_usage(system=system, user=user)  # type: ignore[union-attr]
+            if isinstance(result, OllamaChatResult):
+                return result
+            if isinstance(result, tuple) and len(result) == 2:
+                content, usage = result
+                if not isinstance(usage, OllamaUsage):
+                    usage = OllamaUsage()
+                return OllamaChatResult(content=str(content), usage=usage)
+            if isinstance(result, str):
+                return OllamaChatResult(content=result, usage=OllamaUsage())
+        content = self.llm_client.chat(system=system, user=user)  # type: ignore[union-attr]
+        return OllamaChatResult(content=content, usage=OllamaUsage())
 
     def _parse_json_payload(self, text: str) -> dict:
         candidate = text.strip()

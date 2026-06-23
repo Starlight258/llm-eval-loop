@@ -5,7 +5,7 @@ import json
 import re
 from statistics import mean
 
-from core.llm_client import OllamaClient
+from core.llm_client import OllamaChatResult, OllamaClient, OllamaUsage
 from core.schemas import MockMetricData, PromptDocument, PromptSpec
 
 
@@ -132,6 +132,7 @@ def _build_report(metric: MockMetricData, spec: PromptSpec) -> str:
 class ReportGenerator:
     llm_client: OllamaClient | None = None
     model_name: str = "llama3.2:3b"
+    last_usage: OllamaUsage | None = None
 
     def generate(self, metric: MockMetricData, prompt: PromptDocument | PromptSpec) -> str:
         spec = prompt.spec if isinstance(prompt, PromptDocument) else prompt
@@ -160,4 +161,21 @@ class ReportGenerator:
             "Stay grounded, keep the wording cautious when the movement is modest, keep the whole report short, "
             "and never describe a positive WoW/DoD as a decline or a negative WoW/DoD as growth."
         )
-        return self.llm_client.chat(system=system, user=user)
+        result = self._chat(system=system, user=user)
+        self.last_usage = result.usage
+        return result.content
+
+    def _chat(self, *, system: str, user: str) -> OllamaChatResult:
+        if hasattr(self.llm_client, "chat_with_usage"):
+            result = self.llm_client.chat_with_usage(system=system, user=user)  # type: ignore[union-attr]
+            if isinstance(result, OllamaChatResult):
+                return result
+            if isinstance(result, tuple) and len(result) == 2:
+                content, usage = result
+                if not isinstance(usage, OllamaUsage):
+                    usage = OllamaUsage()
+                return OllamaChatResult(content=str(content), usage=usage)
+            if isinstance(result, str):
+                return OllamaChatResult(content=result, usage=OllamaUsage())
+        content = self.llm_client.chat(system=system, user=user)  # type: ignore[union-attr]
+        return OllamaChatResult(content=content, usage=OllamaUsage())
