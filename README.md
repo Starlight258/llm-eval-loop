@@ -1,212 +1,263 @@
 # LLM Report Evaluation Loop
 
-LLM이 생성한 수치 해석 리포트를 Rubric 기준으로 평가하고, 그 결과와 human feedback을 바탕으로 프롬프트를 반복 개선하는 실험용 프로젝트입니다.
+LLM 제품을 만들면서 가장 어려웠던 점은 프롬프트를 수정하는 것이 아니라 **수정이 실제로 품질을 개선했는지 판단하는 일**이었다.
 
-이 저장소의 핵심은 "리포트를 한 번 잘 쓰는 것"이 아니라, `생성 -> 평가 -> 개선 -> 재평가` 루프를 끝까지 돌려보는 것입니다. mock data로 시작해서, LLM이 리포트를 만들고, judge가 채점하고, optimizer가 다음 prompt를 갱신합니다.
+분석가의 피드백을 반영해 프롬프트를 계속 수정했지만, 한 부분을 고치면 다른 부분의 품질이 떨어지기도 했고, 이전 결과와 직접 비교하지 않으면 정말 좋아졌는지 확인하기 어려웠다.
 
-## 프로젝트 목적
+이 프로젝트는 이런 과정을 사람이 반복하는 대신 **LLM-as-a-Judge**와 **Loop Engineering**을 적용해 자동화해 본 실험이다.
 
-이 프로젝트는 다음을 확인하는 데 초점을 둡니다.
+핵심은 리포트를 한 번 잘 생성하는 것이 아니라,
 
-1. mock data로 리포트를 생성할 수 있는가
-2. rubric judge가 결과를 항목별로 평가할 수 있는가
-3. baseline / latest / best를 분리해 개선 여부를 볼 수 있는가
-4. human feedback를 raw text가 아니라 구조화된 prompt 규칙으로 반영할 수 있는가
-5. runtime / token budget / 반복 횟수 같은 정지 조건으로 루프를 제어할 수 있는가
+> **생성 → 평가 → 개선 → 재평가**
 
-실제 운영 데이터를 직접 쓰지 않고도, 리포트 품질 개선 루프를 검증할 수 있게 만든 것이 목적입니다.
+를 반복하는 **품질 개선 Loop**를 만드는 것이다.
 
-## 동작 흐름
+---
 
-현재 구현은 다음 순서로 동작합니다.
+# 프로젝트 목표
 
-1. `data/mock_*.json`에서 mock metric을 읽는다
-2. `core.generator.ReportGenerator`가 Markdown 리포트를 생성한다
-3. `core.evaluation_agent.EvaluationAgent`가 rubric으로 평가한다
-4. `core.prompt_optimizer.PromptOptimizer`가 다음 prompt를 만든다
-5. `storage.EvaluationStore`가 run과 prompt history를 SQLite에 저장한다
-6. acceptance criteria, runtime budget, token budget, score plateau를 기준으로 멈춘다
+이 프로젝트에서는 다음 세 가지를 확인하는 데 집중했다.
 
-여기서 중요한 점은 human feedback이 generator에 직접 주입되지 않는다는 것입니다.  
-raw feedback는 optimizer가 해석하고, 그 결과를 다음 prompt 규칙으로 반영합니다.
+- LLM이 리포트를 생성하고 평가하는 품질 개선 Loop를 만들 수 있는가
+- Human Feedback을 구조화된 규칙으로 변환해 반복적으로 프롬프트를 개선할 수 있는가
+- 반복 과정에서 품질과 실행 비용을 함께 제어할 수 있는가
 
-## 아키텍처
+실제 운영 데이터를 사용하지 않고도 품질 개선 과정을 검증할 수 있도록 Mock Data 기반으로 구현했다.
 
-<img width="3291" height="2346" alt="image" src="https://github.com/user-attachments/assets/3ba88f55-e172-42ef-8cb5-9485625f7ea9" />
+---
 
-### 구성 요소
+# 동작 흐름
 
-- `data/`: Marketplace, App Engagement, Signup Funnel용 mock 데이터
-- `.local/prompts/`: generator / judge / optimizer용 YAML prompt
-- `core/`: 생성, 평가, 최적화, prompt 로딩, loop orchestration
-- `storage/`: SQLite persistence
-- `app/`: FastAPI 진입점
-- `dashboard/`: Streamlit 진입점
-- `tests/`: 핵심 동작을 검증하는 단위 테스트
+```text
+Mock Data
+    │
+    ▼
+Report Generator
+    │
+    ▼
+Evaluation Agent
+(LLM-as-a-Judge)
+    │
+    ▼
+Prompt Optimizer
+    │
+    ▼
+SQLite Store
+    │
+    ▼
+Loop Controller
+```
 
-### 코드 경계
+1. Mock Data로 리포트를 생성한다.
+2. Evaluation Agent가 Rubric 기준으로 평가한다.
+3. Prompt Optimizer가 평가 결과와 Human Feedback을 다음 프롬프트 규칙으로 변환한다.
+4. 모든 실행 결과를 SQLite에 저장한다.
+5. Loop Controller가 종료 조건을 확인하고 반복 여부를 결정한다.
 
-- `app/main.py`와 `dashboard/streamlit_app.py`는 서로를 호출하지 않고, 둘 다 `core.loop`를 직접 사용한다
-- `Report Generator`
-  - mock metric과 prompt를 받아 초안 리포트를 만든다
-- `Evaluation Agent`
-  - rubric 점수와 failed sentence를 반환한다
-- `Prompt Optimizer`
-  - evaluation result와 human feedback를 받아 다음 prompt를 만든다
-- `Loop Controller`
-  - baseline / feedback refinement / stop criteria를 관리한다
-- `SQLite Store`
-  - evaluation run과 prompt history를 저장한다
-- `Dashboard`
-  - baseline / latest / best를 비교해서 보여준다
+> Human Feedback을 Generator에 직접 전달하지 않는다. Optimizer가 먼저 해석한 뒤 구조화된 규칙으로 변환하고, 다음 프롬프트에만 반영한다.
 
-## 왜 이런 구조로 했는가
+---
 
-### 명확한 정지 조건 (Termination Criteria)
+# 아키텍처
 
-LLM은 스스로 "이제 끝났다"를 판단하지 못하므로, 명시적인 정지 조건이 필요했습니다.  
-이 프로젝트는 `overall score`, 필수 섹션 존재 여부, runtime budget, token budget, max feedback iterations를 같이 봅니다.  
-점수가 합격선에 도달하면 멈추고, 예산을 넘기거나 더 나아지지 않으면 종료합니다.
+<img width="3291" height="2346" alt="architecture" src="https://github.com/user-attachments/assets/3ba88f55-e172-42ef-8cb5-9485625f7ea9" />
 
-### 역할 분리 (Maker-Checker)
+## 구성 요소
 
-생성기와 평가기를 분리했습니다.  
-생성기는 리포트를 만들기만 하고, 평가기는 rubric 점수와 실패 문장만 반환합니다.  
-이렇게 해야 실패 원인을 분리해서 볼 수 있고, 프롬프트 개선이 실제로 어디에 영향을 줬는지 추적할 수 있습니다.
+| 컴포넌트 | 역할 |
+|----------|------|
+| Report Generator | Mock Data로 리포트 생성 |
+| Evaluation Agent | Rubric 기준으로 평가하고 실패 원인 반환 |
+| Prompt Optimizer | 평가 결과와 Human Feedback을 다음 프롬프트 규칙으로 변환 |
+| SQLite Store | 실행 결과와 프롬프트 이력 저장 |
+| Loop Controller | 반복과 종료 조건 제어 |
+| Dashboard | Baseline / Latest / Best 비교 |
 
-### 상태 보존 (State Persistence)
+---
 
-baseline / latest / best, prompt history, evaluation runs를 SQLite에 저장합니다.  
-대시보드는 저장된 run을 읽어서 현재 결과와 과거 결과를 비교합니다.  
-또한 누적 token 수와 경과 시간도 같이 보여줍니다.
+# 설계에서 고민한 점
 
-### 안전한 가드레일 (Safety Guardrails)
+## Maker-Checker Pattern
 
-루프는 최대 3번의 feedback refinement만 허용합니다.  
-`max_runtime_seconds`와 `max_total_tokens`를 두어 무한 반복과 비용 폭주를 막습니다.  
-score가 더 이상 좋아지지 않으면 멈춥니다. tie 또는 decline도 정지 신호로 취급합니다.
+생성과 평가를 같은 모델이 수행하면 자기 결과를 후하게 평가할 가능성이 있다.
 
-### 선택적 Human Feedback
+그래서 Generator는 리포트 생성만, Evaluation Agent는 Rubric 기반 평가만 수행하도록 역할을 분리했다.
 
-업무에서 들어오는 코멘트를 반영하려고 human feedback 입력을 넣었습니다.  
-다만 raw 문장을 generator에 바로 넣지 않고, optimizer가 읽어서 다음 prompt 규칙으로 변환합니다.
+---
 
-### LangChain은 쓰지 않았다
+## Termination Criteria
 
-이 프로젝트는 체인 조합보다 loop 제어와 상태 보존이 더 중요했습니다.  
-생성, 평가, 최적화, 저장, 종료 조건을 직접 드러내는 편이 디버깅과 테스트에 유리했습니다.
+Loop는 오래 실행할수록 품질보다 실행 비용이 더 빠르게 증가할 수 있다.
 
-## 실행 방법
+그래서 다음 조건 중 하나를 만족하면 반복을 종료하도록 설계했다.
 
-### 환경 설정
+- 목표 점수를 만족한 경우
+- 이전보다 점수가 낮아진 경우
+- 최대 반복 횟수에 도달한 경우
+- 최대 실행 시간을 초과한 경우
+- 최대 토큰 사용량을 초과한 경우
 
-루트의 `.env` 파일을 읽습니다. `.env.example`을 복사해서 시작하면 됩니다.
+추가로 반복해도 얻는 품질보다 실행 비용이 더 커지는 시점에 Loop를 멈추도록 했다.
 
-주요 환경 변수:
+---
 
-- `EVAL_LOOP_BACKEND`: `auto`, `ollama`, `claude`
-- `OLLAMA_MODEL`: 기본 `qwen2.5:3b`
-- `OLLAMA_BASE_URL`: 기본 `http://127.0.0.1:11434`
-- `ANTHROPIC_API_KEY`: Claude를 쓸 때 필요
-- `ANTHROPIC_BASE_URL`: 기본 `https://api.anthropic.com`
-- `ANTHROPIC_MODEL`: 기본 `claude-sonnet-4-6`
-- `EVAL_PROMPT_DIR`: prompt YAML 위치
-- `EVAL_DB_PATH`: SQLite 저장 경로
-- `EVAL_LOOP_MAX_RUNTIME_SECONDS`: 전체 runtime budget
-- `EVAL_LOOP_MAX_TOTAL_TOKENS`: 전체 token budget
+## State Persistence
 
-`EVAL_LOOP_BACKEND`를 비워 두면 `auto`로 처리되고, 현재는 Ollama를 우선 사용합니다.  
-Claude를 쓰려면 `EVAL_LOOP_BACKEND=claude`와 `ANTHROPIC_API_KEY`를 설정합니다.
+몇 번만 반복해도 어떤 프롬프트를 사용했고 어떤 피드백을 반영했는지 추적하기 어려워졌다.
 
-### 로컬 실행
+그래서 모든 실행 결과를 SQLite에 저장하고 다음 세 가지 상태를 관리했다.
+
+- **Baseline** : 최초 결과
+- **Latest** : 현재 결과
+- **Best** : 가장 높은 점수의 결과
+
+덕분에 현재 결과뿐 아니라 중간에 더 좋은 결과가 있었는지도 함께 비교할 수 있었다.
+
+---
+
+## Human Feedback 처리
+
+Human Feedback을 Generator에 직접 넣는 방법도 고려했다.
+
+하지만 그렇게 하면 프롬프트 경계가 흐려지고, 어떤 수정이 실제 영향을 준 것인지 추적하기 어려웠다.
+
+그래서 Feedback은 Optimizer가 먼저 읽고 구조화된 규칙으로 변환한 뒤 다음 프롬프트에만 반영하도록 설계했다.
+
+---
+
+## LangChain을 사용하지 않은 이유
+
+이 프로젝트에서 중요한 것은 체인을 만드는 것이 아니라 **Loop를 어떻게 제어할 것인가**였다.
+
+그래서 생성, 평가, 저장, 종료 조건을 코드에서 직접 드러내는 구조를 선택했다.
+
+덕분에 반복 과정을 추적하기 쉽고, 각 컴포넌트를 독립적으로 테스트할 수 있었다.
+
+---
+
+# 평가 방식
+
+Evaluation Agent는 다섯 개 항목을 각각 1~5점으로 평가한 뒤 가중 평균으로 최종 점수를 계산한다.
+
+```text
+overall =
+(3 × appropriateness
++ 2 × groundedness
++ calibration
++ consistency
++ readability)
+/ 8
+```
+
+가장 높은 가중치를 둔 것은 **Appropriateness**와 **Groundedness**였다.
+
+운영 환경에서는 자연스러운 문장보다 **데이터에 근거한 해석과 과도한 일반화를 막는 것**이 더 중요하다고 판단했기 때문이다.
+
+---
+
+# 결과 해석
+
+Dashboard에서는 다음 정보를 함께 확인할 수 있다.
+
+- Baseline Score
+- Latest Score
+- Best Score
+- Feedback Round
+- 토큰 사용량
+- 실행 시간
+
+여기서 중요한 것은 **점수가 항상 올라가는 것이 아니라는 점**이다.
+
+Latest와 Best를 함께 비교하면
+
+- 실제로 개선됐는지
+- 중간에 더 좋은 결과가 있었는지
+
+를 구분할 수 있다.
+
+좋은 피드백이 항상 높은 점수로 이어지는 것은 아니며, 점수 정체 역시 중요한 품질 신호가 될 수 있었다.
+
+---
+
+# 설계 Trade-off
+
+## 피드백은 어디에 반영할 것인가
+
+Feedback을 Generator에 직접 넣으면 프롬프트 경계가 흐려질 수 있었다.
+
+그래서 Optimizer가 Feedback을 구조화된 규칙으로 변환하도록 설계했다.
+
+---
+
+## 왜 Baseline과 Latest를 분리했는가
+
+프롬프트가 정말 개선됐는지 확인하려면 수정 전과 수정 후를 함께 비교할 수 있어야 했다.
+
+또한 Best를 함께 저장하면 중간에 더 좋은 결과가 있었는지도 확인할 수 있다.
+
+---
+
+## 왜 Fallback을 제거했는가
+
+초기에는 잘못된 숫자를 막기 위해 Fallback을 두기도 했다.
+
+하지만 Fallback이 개입하면 LLM의 실제 출력과 프롬프트 효과를 정확하게 확인하기 어려웠다.
+
+그래서 현재는 Judge와 Prompt 규칙만으로 품질을 개선하도록 변경했다.
+
+---
+
+## 왜 점수는 항상 오르지 않는가
+
+처음에는 점수가 계속 오를수록 프롬프트도 좋아질 것이라고 생각했다.
+
+하지만 실제로는 같은 점수라도 핵심 오류가 줄어든 경우가 있었고, 반대로 핵심 오류는 그대로인데 점수만 유지되는 경우도 있었다.
+
+이 경험을 통해 점수는 최적화 목표가 아니라 **품질이 퇴보하지 않았는지 확인하는 가드레일**이라는 것을 알게 됐다.
+
+---
+
+# 실행 방법
+
+## 환경 설정
+
+`.env.example`을 복사해 `.env`를 생성한다.
+
+### 주요 환경 변수
+
+- `EVAL_LOOP_BACKEND`
+- `OLLAMA_MODEL`
+- `ANTHROPIC_API_KEY`
+- `EVAL_DB_PATH`
+- `EVAL_LOOP_MAX_RUNTIME_SECONDS`
+- `EVAL_LOOP_MAX_TOTAL_TOKENS`
+
+## 실행
+
+### API
 
 ```bash
 uv run uvicorn app.main:app --host 127.0.0.1 --port 8000
 ```
 
+### Dashboard
+
 ```bash
 uv run streamlit run dashboard/streamlit_app.py
 ```
 
-### Docker 실행
+### Docker
 
 ```bash
 docker compose up --build
 ```
 
-Docker Compose는 API, Dashboard, Ollama를 함께 띄웁니다.  
-처음 한 번은 Ollama 모델을 내려받아야 합니다.
+---
 
-```bash
-docker compose up -d ollama
-docker compose exec ollama ollama pull qwen2.5:3b
-```
+# 배운 점
 
-접속 주소:
+이번 프로젝트를 통해 가장 크게 배운 것은 **좋은 프롬프트보다 좋은 품질 개선 Loop가 더 중요하다**는 점이었다.
 
-- API: `http://localhost:8000`
-- Dashboard: `http://localhost:8501`
+Rubric으로 평가 기준을 정의하고, LLM-as-a-Judge로 품질을 평가하고, Human Feedback을 구조화하고, 반복을 언제 멈출지 설계하는 과정이 쌓이면서 프롬프트도 점점 안정적으로 개선됐다.
 
-## 결과 해석 기준
-
-대시보드는 다음 값을 함께 보여줍니다.
-
-- `Baseline score`
-- `Latest score`
-- `Best score`
-- `Feedback rounds`
-- `Tokens used`
-- `Elapsed seconds`
-
-여기서 중요한 것은 항상 점수가 올라가야 한다는 가정이 아니라,  
-baseline 대비 latest가 어떻게 바뀌었는지, 그리고 best가 어디에서 나왔는지를 같이 보는 것입니다.  
-피드백이 들어갔다고 해서 점수가 항상 오르지는 않으며, 오히려 특정 항목이 좋아지는 대신 다른 항목이 나빠질 수도 있습니다.
-
-## 내가 고민한 점
-
-### 1. 입력 피드백은 어디에 넣을 것인가
-
-처음에는 human feedback를 generator에 직접 넣는 방식도 생각했지만, 그렇게 하면 프롬프트 경계가 흐려질 수 있었습니다.  
-그래서 optimizer가 feedback를 읽고, 그 의미를 구조화된 규칙으로 바꿔 다음 prompt에 반영하도록 했습니다.
-
-### 2. baseline과 latest를 왜 분리했는가
-
-피드백 전과 후를 분리해야 개선 여부를 판단할 수 있기 때문입니다.  
-이 구조가 있어야 "피드백이 실제로 도움이 됐는지", "중간 버전이 더 나았는지"를 구분할 수 있습니다.
-
-### 3. 왜 canonical fallback을 제거했는가
-
-초기에는 잘못된 숫자나 방향을 막기 위해 fallback을 두기도 했지만, 그 방식은 LLM 출력과 프롬프트 효과를 가릴 수 있었습니다.  
-지금은 실제 LLM 출력이 더 직접적으로 드러나도록 두고, judge와 prompt 규칙으로 품질을 잡는 쪽을 택했습니다.
-
-### 4. score가 항상 오르지 않는 이유
-
-LLM 출력은 여러 평가 항목의 균형으로 결정되기 때문입니다.  
-한 항목을 고치면 다른 항목이 미세하게 흔들릴 수 있고, 그래서 total score가 그대로이거나 오히려 떨어질 수 있습니다.  
-이 프로젝트에서 확인한 중요한 사실은 "피드백이 반영됐다"와 "점수가 올랐다"는 같은 말이 아니라는 점입니다.
-
-## 배운 점
-
-- AI의 강점은 단발성 생성보다 반복 개선 루프에 있다
-- raw feedback보다 구조화된 규칙이 안정적이다
-- 숫자 표기, 단위, 해석 분리 같은 작은 규칙이 품질에 큰 영향을 준다
-- 생성과 평가를 분리해야 문제의 위치가 보인다
-- 점수가 오르지 않는 것도 중요한 학습 신호다
-
-## 앞으로의 개선 방향
-
-- feedback를 항목별 정책으로 더 세분화하기
-- snapshot / interpretation / watchouts를 별도 규칙으로 더 강하게 분리하기
-- judge의 failed sentence 유형별로 optimizer rule을 더 정밀하게 만들기
-- latest / best 비교를 UI에서 더 직관적으로 보이게 하기
-- 평가 루프를 실제 업무 피드백 흐름에 맞게 더 확장하기
-
-## 레이아웃
-
-- `core/` - 생성, 평가, 프롬프트 로딩, 최적화, 루프 제어
-- `storage/` - SQLite 저장
-- `app/` - FastAPI API
-- `dashboard/` - Streamlit UI
-- `data/` - mock 데이터
-- `.local/prompts/` - YAML 프롬프트
-- `tests/` - 단위 테스트
+좋은 프롬프트는 한 번의 수정으로 만들어지는 것이 아니라, **좋은 평가 Loop 안에서 반복적으로 만들어진다.**
