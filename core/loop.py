@@ -99,7 +99,6 @@ def run_evaluation_loop(
     def _run_single_pass(
         prompt: PromptDocument,
         *,
-        loop_feedback: str,
         phase: str,
     ) -> tuple[EvaluationRunRecord, EvaluationResult]:
         nonlocal total_prompt_tokens, total_completion_tokens
@@ -121,7 +120,7 @@ def run_evaluation_loop(
             good_example=prompt.spec.good_example,
             bad_example=prompt.spec.bad_example,
         )
-        report_text = generator.generate(metric, prompt, human_feedback=loop_feedback)
+        report_text = generator.generate(metric, prompt)
         total_prompt_tokens, total_completion_tokens = _record_usage(
             getattr(generator, "last_usage", None),
             total_prompt_tokens=total_prompt_tokens,
@@ -157,7 +156,7 @@ def run_evaluation_loop(
     if runtime is not None and runtime.max_runtime_seconds > 0 and monotonic() - started_at >= runtime.max_runtime_seconds:
         stopped_reason = "runtime_budget_exceeded"
     else:
-        baseline_run, baseline_evaluation = _run_single_pass(current_prompt, loop_feedback="", phase="baseline")
+        baseline_run, baseline_evaluation = _run_single_pass(current_prompt, phase="baseline")
         acceptance_passed, acceptance_checks, acceptance_failures = _evaluate_acceptance(
             baseline_run.report_text,
             baseline_evaluation,
@@ -194,7 +193,6 @@ def run_evaluation_loop(
                 current_prompt = next_prompt
                 next_run, next_evaluation = _run_single_pass(
                     current_prompt,
-                    loop_feedback=loop_feedback,
                     phase="feedback",
                 )
                 feedback_runs.append(next_run)

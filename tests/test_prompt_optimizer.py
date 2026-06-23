@@ -221,8 +221,35 @@ class PromptOptimizerTests(unittest.TestCase):
                 iteration=0,
                 human_feedback="Make the tone less assertive and keep the watchouts to one bullet.",
             )
-            self.assertIn("Apply this human feedback", next_prompt.spec.instructions)
-            self.assertIn("human feedback", next_prompt.spec.notes.lower())
+            self.assertNotIn("Make the tone less assertive and keep the watchouts to one bullet.", next_prompt.spec.instructions)
+            self.assertEqual(next_prompt.spec.tone, "measured")
+            self.assertEqual(next_prompt.spec.max_bullets, 3)
+            self.assertIn("Applied human feedback as scoped prompt rules.", next_prompt.spec.notes)
+
+    def test_optimizer_adds_snapshot_stability_rules_for_dod_wow_feedback(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            prompt = load_test_prompt(tmpdir)
+            evaluation = EvaluationResult(
+                scores=EvaluationScores(
+                    groundedness_score=4.8,
+                    appropriateness_score=4.8,
+                    calibration_score=4.8,
+                    consistency_score=4.8,
+                    readability_score=4.8,
+                ),
+                failed_sentences=[],
+                judge_feedback="ok",
+                improvement_suggestions=[],
+            )
+            next_prompt = PromptOptimizer().propose_next(
+                prompt,
+                evaluation,
+                iteration=0,
+                human_feedback="DoD와 WoW를 구분해라",
+            )
+            self.assertIn("Keep the Snapshot section labels and units unchanged.", next_prompt.spec.instructions)
+            self.assertIn("Preserve the source percent format for DoD and WoW", next_prompt.spec.instructions)
+            self.assertIn("Applied human feedback as scoped prompt rules.", next_prompt.spec.notes)
 
     def test_loop_separates_baseline_and_feedback_runs(self) -> None:
         class FakeGenerator:
@@ -316,7 +343,7 @@ class PromptOptimizerTests(unittest.TestCase):
         self.assertEqual(len(result.feedback_runs), 1)
         self.assertEqual(len(result.runs), 2)
         self.assertEqual(services.generator.calls[0], "")
-        self.assertEqual(services.generator.calls[1], "Please soften the tone and keep watchouts shorter.")
+        self.assertEqual(services.generator.calls[1], "")
         self.assertGreater(result.best_run.overall_score, result.baseline_run.overall_score)
 
     def test_loop_stops_when_feedback_score_is_equal(self) -> None:

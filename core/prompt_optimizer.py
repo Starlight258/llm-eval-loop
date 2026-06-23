@@ -18,6 +18,37 @@ def _contains_direction_failure(evaluation: EvaluationResult) -> bool:
     return any("Direction words contradict the source data." in sentence for sentence in evaluation.failed_sentences)
 
 
+def _human_feedback_rules(human_feedback: str) -> tuple[list[str], str, str, int | None]:
+    text = human_feedback.lower()
+    rules: list[str] = []
+    tone = ""
+    caution_level = ""
+    max_bullets: int | None = None
+
+    if not text.strip():
+        return rules, tone, caution_level, max_bullets
+
+    if any(keyword in text for keyword in {"dod", "wow"}):
+        rules.append(
+            "Keep DoD and WoW separate. Treat DoD as day-over-day change and WoW as week-over-week change; do not restate one as the other."
+        )
+        rules.append(
+            "Keep the Snapshot section labels and units unchanged. Preserve the source percent format for DoD and WoW, do not rewrite them as percentage points, and keep Current, Previous, and 4W Average at the same scale as the source data."
+        )
+    if any(keyword in text for keyword in {"trend_7d", "stable", "악화", "deterior", "worsen", "downward"}):
+        rules.append(
+            "Interpret trend_7d directly from the source series. Do not call a worsening series stable."
+        )
+        caution_level = "high"
+    if any(keyword in text for keyword in {"tone", "assertive", "measured", "soften"}):
+        tone = "measured"
+        rules.append("Keep the tone measured and avoid overconfident phrasing.")
+    if any(keyword in text for keyword in {"watchout", "bullet", "short"}):
+        max_bullets = 3
+        rules.append("Keep watchouts short and limit them to the smallest number of bullets that still cover the issue.")
+    return rules, tone, caution_level, max_bullets
+
+
 @dataclass
 class PromptOptimizer:
     def propose_next(
@@ -88,11 +119,18 @@ class PromptOptimizer:
             )
             notes.append("No major issues detected, so the next version keeps the same approach.")
 
-        if human_feedback.strip():
-            instruction_additions.append(
-                f"Apply this human feedback when it improves the next draft: {human_feedback.strip()}"
-            )
-            notes.append("Incorporated optional human feedback into the next prompt.")
+        human_rules, human_tone, human_caution_level, human_max_bullets = _human_feedback_rules(human_feedback)
+        if human_rules:
+            instruction_additions.extend(human_rules)
+            notes.append("Applied human feedback as scoped prompt rules.")
+        if human_tone:
+            tone = human_tone
+        if human_caution_level:
+            caution_level = human_caution_level
+        if human_max_bullets is not None:
+            max_bullets = min(max_bullets, human_max_bullets)
+        if human_feedback.strip() and not human_rules:
+            notes.append("Human feedback was reviewed but did not map to a scoped prompt rule.")
 
         next_spec = update_prompt_spec(
             spec,

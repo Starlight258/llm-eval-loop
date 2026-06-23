@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 import sys
 from pathlib import Path
@@ -29,6 +30,7 @@ def main() -> None:
     if st is None:
         print("streamlit is not installed")
         return
+    logging.basicConfig(level=logging.INFO)
     base_runtime = RuntimeConfig.from_env()
     st.title("LLM Report Evaluation Loop")
     st.caption("Run mock datasets through a report generator, rubric judge, and prompt optimizer.")
