@@ -1,0 +1,68 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="760" viewBox="0 0 1200 760">
+  <defs>
+    <style>
+      .box { fill: #fffaf3; stroke: #222; stroke-width: 2.2; rx: 18; ry: 18; }
+      .group { fill: #f4f1ec; stroke: #444; stroke-width: 2.4; rx: 26; ry: 26; }
+      .title { font: 700 22px Georgia, serif; fill: #111; }
+      .label { font: 600 18px Georgia, serif; fill: #111; }
+      .small { font: 500 14px Georgia, serif; fill: #333; }
+      .arrow { stroke: #222; stroke-width: 2.4; fill: none; marker-end: url(#arrowhead); }
+      .dashed { stroke-dasharray: 6 6; }
+    </style>
+    <marker id="arrowhead" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto">
+      <path d="M0,0 L8,3 L0,6 Z" fill="#222" />
+    </marker>
+  </defs>
+
+  <rect x="28" y="28" width="1144" height="700" class="group" />
+  <text x="60" y="66" class="title">LLM Report Evaluation Loop</text>
+
+  <rect x="80" y="120" width="240" height="120" class="box" />
+  <text x="200" y="166" text-anchor="middle" class="label">Mock Data</text>
+  <text x="200" y="193" text-anchor="middle" class="small">data/*.json</text>
+
+  <rect x="80" y="280" width="240" height="120" class="box" />
+  <text x="200" y="326" text-anchor="middle" class="label">Prompt YAML</text>
+  <text x="200" y="353" text-anchor="middle" class="small">.local/prompts/*.yaml</text>
+
+  <rect x="440" y="110" width="300" height="140" class="box" />
+  <text x="590" y="156" text-anchor="middle" class="label">Report Generator</text>
+  <text x="590" y="184" text-anchor="middle" class="small">heuristic fallback or Ollama</text>
+
+  <rect x="440" y="300" width="300" height="140" class="box" />
+  <text x="590" y="346" text-anchor="middle" class="label">Evaluation Agent</text>
+  <text x="590" y="374" text-anchor="middle" class="small">rule-based or Ollama judge</text>
+
+  <rect x="440" y="500" width="300" height="140" class="box" />
+  <text x="590" y="546" text-anchor="middle" class="label">Prompt Optimizer</text>
+  <text x="590" y="574" text-anchor="middle" class="small">feedback-driven updates</text>
+
+  <rect x="860" y="110" width="240" height="120" class="box" />
+  <text x="980" y="156" text-anchor="middle" class="label">SQLite Store</text>
+  <text x="980" y="183" text-anchor="middle" class="small">evaluation_runs</text>
+
+  <rect x="860" y="300" width="240" height="120" class="box" />
+  <text x="980" y="346" text-anchor="middle" class="label">FastAPI</text>
+  <text x="980" y="373" text-anchor="middle" class="small">/run, /runtime, /datasets</text>
+
+  <rect x="860" y="500" width="240" height="120" class="box" />
+  <text x="980" y="546" text-anchor="middle" class="label">Streamlit Dashboard</text>
+  <text x="980" y="573" text-anchor="middle" class="small">latest / best view</text>
+
+  <rect x="80" y="500" width="240" height="120" class="box" />
+  <text x="200" y="546" text-anchor="middle" class="label">Host Ollama</text>
+  <text x="200" y="573" text-anchor="middle" class="small">llama3.2:3b</text>
+
+  <path d="M320 180 L440 180" class="arrow" />
+  <path d="M320 340 L440 340" class="arrow" />
+  <path d="M590 250 L590 300" class="arrow" />
+  <path d="M590 440 L590 500" class="arrow" />
+  <path d="M740 170 L860 170" class="arrow" />
+  <path d="M740 360 L860 360" class="arrow" />
+  <path d="M740 560 L860 560" class="arrow" />
+  <path d="M320 560 L440 560" class="arrow" />
+
+  <path d="M980 230 L980 300" class="arrow dashed" />
+  <path d="M980 420 L980 500" class="arrow dashed" />
+  <path d="M320 560 L320 620 L440 620" class="arrow dashed" />
+</svg>
