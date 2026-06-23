@@ -33,37 +33,46 @@ class PromptOptimizer:
 
         if evaluation.scores.groundedness_score < 4.5 or _contains_direction_failure(evaluation):
             instruction_additions.append(
-                "Keep the sign of WoW and DoD consistent. If the source data is positive, describe it as increasing or growing; if it is negative, describe it as decreasing or falling. Never reverse the direction."
+                "Keep WoW and DoD aligned with the source data. If the movement is positive, describe it as up or higher; if it is negative, describe it as down or lower. Do not flip the direction."
             )
-            good_example = "The metric increased week over week, so the direction is positive."
-            bad_example = "The metric declined week over week even though the source data is positive."
+            good_example = "The metric increased week over week, which matches the positive direction in the data."
+            bad_example = "The metric declined week over week even though the source data shows an increase."
             notes.append("Reinforced direction consistency and exact number usage.")
 
         if evaluation.scores.appropriateness_score < 4.5:
             tone = "measured"
             caution_level = "balanced"
             instruction_additions.append(
-                "Avoid dramatic language unless the movement is materially large."
+                "Keep the tone measured unless the movement is clearly large."
             )
+            good_example = "The metric moved higher this week, but the change is still small enough to keep the read measured."
+            bad_example = "The metric exploded, so the result is obviously exceptional."
             notes.append("Reduced overconfident phrasing.")
 
         if evaluation.scores.calibration_score < 4.5:
             caution_level = "high"
             instruction_additions.append(
-                "Add one short hedge when the movement is modest so the conclusion stays calibrated."
+                "When the movement is modest, add one short hedge and avoid turning a small shift into a firm conclusion."
             )
-            good_example = "The metric appears weaker, although the data only supports a directional read."
-            bad_example = "The metric is definitely broken, and the cause is obvious."
+            good_example = "The metric moved lower this week, but the pattern is still too small to call a clear trend."
+            bad_example = "The metric is broken, and this clearly shows the issue is severe."
             notes.append("Added hedging for modest movement.")
 
         if evaluation.scores.consistency_score < 4.5:
             instruction_additions.append(
-                "Use the same threshold logic in the snapshot, interpretation, and watchouts sections."
+                "Use the same threshold logic in the snapshot, interpretation, and watchouts sections so the report does not contradict itself."
             )
+            good_example = "The snapshot and watchouts both treat the change as modest, so the report stays consistent."
+            bad_example = "The snapshot calls the move small, but the interpretation describes it as a major shift."
             notes.append("Aligned threshold logic across sections.")
 
         if evaluation.scores.readability_score < 4.5:
             max_bullets = min(max_bullets, 4)
+            instruction_additions.append(
+                "Keep bullets short and avoid stacking too many points in one section."
+            )
+            good_example = "The report stays compact, with each section making one clear point."
+            bad_example = "The report uses long bullets and tries to cover too many ideas at once."
             notes.append("Kept the markdown shallow.")
 
         if not instruction_additions:
