@@ -31,7 +31,7 @@ def main() -> None:
         return
     st.title("LLM Report Evaluation Loop")
     st.caption("Run mock datasets through a report generator, rubric judge, and prompt optimizer.")
-    backend = st.sidebar.selectbox("Backend", ["auto", "ollama", "heuristic"], index=0)
+    backend = st.sidebar.selectbox("Backend", ["auto", "ollama"], index=0)
     model_name = st.sidebar.text_input("Model", value=os.getenv("OLLAMA_MODEL", "llama3.2:3b"))
     ollama_base_url = st.sidebar.text_input(
         "Ollama URL",

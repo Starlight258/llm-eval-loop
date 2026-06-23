@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import json
+import re
 from statistics import mean
 
 from core.llm_client import OllamaClient
@@ -65,14 +66,14 @@ def _expected_direction(metric: MockMetricData) -> str:
 def _has_direction_mismatch(report_text: str, metric: MockMetricData) -> bool:
     direction = _expected_direction(metric)
     text = report_text.lower()
-    if direction == "up" and any(word in text for word in {"down", "decline", "decrease", "drop", "softening"}):
+    if direction == "up" and any(re.search(rf"\\b{word}\\b", text) for word in {"down", "decline", "decrease", "drop", "softening"}):
         return True
-    if direction == "down" and any(word in text for word in {"up", "increase", "rise", "surge", "growth"}):
+    if direction == "down" and any(re.search(rf"\\b{word}\\b", text) for word in {"up", "increase", "rise", "surge", "growth"}):
         return True
     return False
 
 
-def _build_heuristic_report(metric: MockMetricData, spec: PromptSpec) -> str:
+def _build_report(metric: MockMetricData, spec: PromptSpec) -> str:
     change_direction = _direction_word(metric.wow)
     trend = _trend_label(metric.trend_7d)
     caution = _caution_phrase(spec)
@@ -134,15 +135,12 @@ class ReportGenerator:
 
     def generate(self, metric: MockMetricData, prompt: PromptDocument | PromptSpec) -> str:
         spec = prompt.spec if isinstance(prompt, PromptDocument) else prompt
-        if self.llm_client is not None:
-            try:
-                report = self._generate_with_llm(metric, spec)
-                if _has_direction_mismatch(report, metric):
-                    return _build_heuristic_report(metric, spec)
-                return report
-            except Exception:
-                pass
-        return _build_heuristic_report(metric, spec)
+        if self.llm_client is None:
+            raise RuntimeError("Ollama client is required for report generation")
+        report = self._generate_with_llm(metric, spec)
+        if _has_direction_mismatch(report, metric):
+            raise ValueError("LLM report direction contradicts the source data")
+        return report
 
     def _generate_with_llm(self, metric: MockMetricData, spec: PromptSpec) -> str:
         system = (

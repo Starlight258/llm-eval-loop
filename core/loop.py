@@ -3,7 +3,7 @@ from __future__ import annotations
 from core.evaluation_agent import EvaluationAgent
 from core.generator import ReportGenerator
 from core.prompt_optimizer import PromptOptimizer
-from core.runtime import RuntimeConfig, build_services
+from core.runtime import RuntimeConfig, RuntimeServices, build_services
 from core.schemas import EvaluationRunRecord, LoopResult, MockMetricData, PromptDocument, PromptVersionRecord
 from storage.db import EvaluationStore
 
@@ -17,9 +17,10 @@ def run_evaluation_loop(
     store: EvaluationStore,
     *,
     runtime: RuntimeConfig | None = None,
+    services: RuntimeServices | None = None,
     max_iterations: int = MAX_LOOP_ITERATIONS,
 ) -> LoopResult:
-    services = build_services(runtime or RuntimeConfig(backend="heuristic"))
+    services = services or build_services(runtime or RuntimeConfig())
     generator = services.generator
     judge = services.evaluator
     optimizer = PromptOptimizer()

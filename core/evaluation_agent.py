@@ -41,9 +41,9 @@ def _expected_direction(metric: MockMetricData) -> str:
 def _has_mismatch(report_text: str, metric: MockMetricData) -> bool:
     direction = _expected_direction(metric)
     text = report_text.lower()
-    if direction == "up" and any(word in text for word in {"down", "decline", "decrease", "drop", "softening"}):
+    if direction == "up" and any(re.search(rf"\\b{word}\\b", text) for word in {"down", "decline", "decrease", "drop", "softening"}):
         return True
-    if direction == "down" and any(word in text for word in {"up", "increase", "rise", "surge", "growth"}):
+    if direction == "down" and any(re.search(rf"\\b{word}\\b", text) for word in {"up", "increase", "rise", "surge", "growth"}):
         return True
     return False
 
@@ -130,34 +130,9 @@ class EvaluationAgent:
     model_name: str = "llama3.2:3b"
 
     def evaluate(self, metric: MockMetricData, report_text: str) -> EvaluationResult:
-        if self.llm_client is not None:
-            try:
-                return self._evaluate_with_llm(metric, report_text)
-            except Exception:
-                pass
-        sentences = _sentences(report_text)
-        groundedness = _groundedness_score(metric, report_text)
-        appropriateness = _appropriateness_score(metric, sentences)
-        calibration = _calibration_score(metric, sentences)
-        consistency = _consistency_score(metric, sentences)
-        readability = _readability_score(report_text)
-        failed_sentences = _find_strong_sentences(sentences, metric)
-        if _has_mismatch(report_text, metric):
-            failed_sentences.append("Direction words contradict the source data.")
-        feedback = self._build_feedback(metric, groundedness, appropriateness, calibration, consistency, readability)
-        suggestions = self._build_suggestions(groundedness, appropriateness, calibration, consistency, readability)
-        return EvaluationResult(
-            scores=EvaluationScores(
-                groundedness_score=groundedness,
-                appropriateness_score=appropriateness,
-                calibration_score=calibration,
-                consistency_score=consistency,
-                readability_score=readability,
-            ),
-            failed_sentences=failed_sentences,
-            judge_feedback=feedback,
-            improvement_suggestions=suggestions,
-        )
+        if self.llm_client is None:
+            raise RuntimeError("Ollama client is required for evaluation")
+        return self._evaluate_with_llm(metric, report_text)
 
     def _build_feedback(
         self,

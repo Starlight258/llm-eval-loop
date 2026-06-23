@@ -37,15 +37,6 @@ def load_test_prompt(tmpdir: str):
 
 class GeneratorTests(unittest.TestCase):
     def test_generator_uses_source_values(self) -> None:
-        metric = MockMetricData(**json.loads((BASE_DIR / "data/mock_marketplace.json").read_text()))
-        with tempfile.TemporaryDirectory() as tmpdir:
-            prompt = load_test_prompt(tmpdir)
-        report = ReportGenerator().generate(metric, prompt)
-        self.assertIn("listing_count Report", report)
-        self.assertIn("572,000", report)
-        self.assertIn("-2.0%", report)
-
-    def test_generator_falls_back_when_llm_reverses_direction(self) -> None:
         class FakeClient:
             def chat(self, *, system: str, user: str) -> str:
                 return (
@@ -58,19 +49,18 @@ class GeneratorTests(unittest.TestCase):
                     "- WoW: -2.0%\n"
                     "- 4W average: 560,000\n\n"
                     "## Interpretation\n"
-                    "The metric increased week over week and the trend is clear.\n\n"
+                    "The metric decreased week over week and the trend is downward.\n\n"
                     "## Breakdown\n"
-                    "- No breakdowns were included in this run.\n\n"
+                    "- category: books -1.2%, electronics -2.4%\n\n"
                     "## Watchouts\n"
-                    "- Keep watching the trend."
+                    "- The movement is directional."
                 )
 
         metric = MockMetricData(**json.loads((BASE_DIR / "data/mock_marketplace.json").read_text()))
         with tempfile.TemporaryDirectory() as tmpdir:
             prompt = load_test_prompt(tmpdir)
         report = ReportGenerator(llm_client=FakeClient()).generate(metric, prompt)
-        self.assertIn("decreased week over week", report)
-        self.assertNotIn("increased week over week", report)
+        self.assertIn("listing_count Report", report)
         self.assertIn("572,000", report)
         self.assertIn("-2.0%", report)
 

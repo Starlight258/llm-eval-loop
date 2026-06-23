@@ -30,7 +30,7 @@ class RuntimeConfig:
 
     def normalized_backend(self) -> str:
         backend = self.backend.strip().lower()
-        if backend not in {"auto", "ollama", "heuristic"}:
+        if backend not in {"auto", "ollama"}:
             return "auto"
         return backend
 
@@ -45,19 +45,19 @@ class RuntimeServices:
 def build_services(config: RuntimeConfig | None = None) -> RuntimeServices:
     config = config or RuntimeConfig.from_env()
     backend = config.normalized_backend()
-    client = None
-    backend_label = "heuristic"
-    if backend in {"auto", "ollama"}:
-        candidate = OllamaClient(
-            base_url=config.ollama_base_url,
-            model_name=config.model_name,
-            timeout_seconds=config.timeout_seconds,
-            num_ctx=config.num_ctx,
-            temperature=config.temperature,
-        )
-        if backend == "ollama" or candidate.is_available():
-            client = candidate
-            backend_label = f"ollama:{config.model_name}"
+    if backend not in {"auto", "ollama"}:
+        raise ValueError(f"unsupported backend: {backend}")
+    candidate = OllamaClient(
+        base_url=config.ollama_base_url,
+        model_name=config.model_name,
+        timeout_seconds=config.timeout_seconds,
+        num_ctx=config.num_ctx,
+        temperature=config.temperature,
+    )
+    if not candidate.is_available():
+        raise ConnectionError(f"failed to reach Ollama at {config.ollama_base_url}")
+    client = candidate
+    backend_label = f"ollama:{config.model_name}"
     return RuntimeServices(
         generator=ReportGenerator(llm_client=client, model_name=config.model_name),
         evaluator=EvaluationAgent(llm_client=client, model_name=config.model_name),
