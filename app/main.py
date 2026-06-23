@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 from pathlib import Path
 
@@ -45,6 +46,7 @@ DB_PATH = Path(os.getenv("EVAL_DB_PATH", str(BASE_DIR / "storage" / "evaluation.
 
 app = FastAPI(title="LLM Report Evaluation Loop")
 RUNTIME_CONFIG = RuntimeConfig.from_env()
+logging.basicConfig(level=logging.INFO)
 
 
 def load_metric(dataset_id: str) -> MockMetricData:

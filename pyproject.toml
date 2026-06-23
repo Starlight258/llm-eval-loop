@@ -3,6 +3,9 @@ name = "report-eval-loop"
 version = "0.1.0"
 description = "LLM report evaluation loop with mock metrics, rubric scoring, and prompt iteration"
 requires-python = ">=3.11"
+dependencies = [
+    "anthropic",
+]
 
 [tool.unittest]
 start-directory = "tests"

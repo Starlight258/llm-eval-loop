@@ -169,8 +169,15 @@ class EvaluationAgent:
     def _chat(self, *, system: str, user: str) -> OllamaChatResult:
         if hasattr(self.llm_client, "chat_with_usage"):
             result = self.llm_client.chat_with_usage(system=system, user=user)  # type: ignore[union-attr]
-            if isinstance(result, OllamaChatResult):
-                return result
+            if hasattr(result, "content") and hasattr(result, "usage"):
+                usage = getattr(result, "usage")
+                return OllamaChatResult(
+                    content=str(getattr(result, "content")),
+                    usage=OllamaUsage(
+                        prompt_tokens=int(getattr(usage, "prompt_tokens", 0) or 0),
+                        completion_tokens=int(getattr(usage, "completion_tokens", 0) or 0),
+                    ),
+                )
             if isinstance(result, tuple) and len(result) == 2:
                 content, usage = result
                 if not isinstance(usage, OllamaUsage):

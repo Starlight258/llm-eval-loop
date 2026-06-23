@@ -7,6 +7,7 @@ import unittest
 
 from core.evaluation_agent import EvaluationAgent
 from core.generator import ReportGenerator
+from core.llm_client import AnthropicChatResult, AnthropicUsage
 from core.prompt_loader import load_prompt_document
 from core.schemas import MockMetricData
 
@@ -252,6 +253,49 @@ class EvaluationAgentTests(unittest.TestCase):
         result = EvaluationAgent(llm_client=FakeJudgeClient()).evaluate(metric, report)
         self.assertLess(result.scores.groundedness_score, 4.5)
         self.assertTrue(any("Snapshot value mismatch" in sentence for sentence in result.failed_sentences))
+
+    def test_evaluation_preserves_anthropic_usage(self) -> None:
+        class FakeJudgeClient:
+            def chat_with_usage(self, *, system: str, user: str):
+                return AnthropicChatResult(
+                    content=json.dumps(
+                        {
+                            "groundedness_score": 4.9,
+                            "appropriateness_score": 4.8,
+                            "calibration_score": 4.8,
+                            "consistency_score": 4.8,
+                            "readability_score": 4.8,
+                            "failed_sentences": [],
+                            "judge_feedback": "ok",
+                            "improvement_suggestions": [],
+                        }
+                    ),
+                    usage=AnthropicUsage(prompt_tokens=21, completion_tokens=43),
+                )
+
+        metric = MockMetricData(**json.loads((BASE_DIR / "data/mock_engagement.json").read_text()))
+        report = (
+            "# App Engagement Daily Active Users Report\n\n"
+            "## Snapshot\n"
+            "- Domain: App Engagement\n"
+            "- Current: 1,845,000\n"
+            "- Previous: 1,812,000\n"
+            "- DoD: +1.8%\n"
+            "- WoW: +4.9%\n"
+            "- 4W Average: 1,760,000\n\n"
+            "## Interpretation\n"
+            "The daily active user count has increased by 33,000.\n\n"
+            "## Breakdown\n"
+            "- platform: Android +2.2%, iOS +1.4%, Web +0.9%\n\n"
+            "## Watchouts\n"
+            "- Keep monitoring."
+        )
+        judge = EvaluationAgent(llm_client=FakeJudgeClient())
+        result = judge.evaluate(metric, report)
+        self.assertIsNotNone(judge.last_usage)
+        self.assertEqual(judge.last_usage.prompt_tokens, 21)
+        self.assertEqual(judge.last_usage.completion_tokens, 43)
+        self.assertGreaterEqual(result.overall_score, 1.0)
 
 
 if __name__ == "__main__":
