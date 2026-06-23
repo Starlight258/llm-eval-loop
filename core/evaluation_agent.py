@@ -63,6 +63,22 @@ def _numeric_change_mismatch_sentences(report_text: str, metric: MockMetricData)
     return failed
 
 
+def _snapshot_value_mismatch_sentences(report_text: str, metric: MockMetricData) -> list[str]:
+    normalized_text = report_text.replace(",", "")
+    required_values = [
+        (f"current={metric.current:.0f}", f"{metric.current:.0f}"),
+        (f"previous={metric.previous:.0f}", f"{metric.previous:.0f}"),
+        (f"avg_4w={metric.avg_4w:.0f}", f"{metric.avg_4w:.0f}"),
+        (f"dod={metric.dod:+.1f}%", f"{metric.dod:+.1f}%"),
+        (f"wow={metric.wow:+.1f}%", f"{metric.wow:+.1f}%"),
+    ]
+    failed: list[str] = []
+    for label, value in required_values:
+        if value not in normalized_text:
+            failed.append(f"Snapshot value mismatch: missing {label}.")
+    return failed
+
+
 @dataclass
 class EvaluationAgent:
     llm_client: OllamaClient | None = None
@@ -97,7 +113,9 @@ class EvaluationAgent:
             '"failed_sentences": [string], '
             '"judge_feedback": string, '
             '"improvement_suggestions": [string]'
-            "}\n\n"
+            "}\n"
+            "Return only one JSON object. Do not wrap it in markdown fences. Do not add commentary. "
+            "Do not use trailing commas.\n\n"
             f"Source data:\n{json.dumps(metric.__dict__, ensure_ascii=False, indent=2)}\n\n"
             f"Report:\n{report_text}\n"
             "All scores must be between 1 and 5."
@@ -108,6 +126,10 @@ class EvaluationAgent:
         payload = self._parse_json_payload(raw)
         local_failures: list[str] = []
         groundedness_penalty = 0.0
+        snapshot_failures = _snapshot_value_mismatch_sentences(report_text, metric)
+        if snapshot_failures:
+            local_failures.extend(snapshot_failures)
+            groundedness_penalty += 1.5
         if _has_mismatch(report_text, metric):
             local_failures.append("Direction words contradict the source data.")
             groundedness_penalty += 1.5
@@ -133,6 +155,8 @@ class EvaluationAgent:
         improvement_suggestions = [str(item) for item in payload.get("improvement_suggestions", [])]
         if numeric_failures and "Describe the change using the delta between current and previous." not in improvement_suggestions:
             improvement_suggestions.append("Describe the change using the delta between current and previous.")
+        if snapshot_failures and "Copy the Snapshot values exactly as provided in the source data." not in improvement_suggestions:
+            improvement_suggestions.append("Copy the Snapshot values exactly as provided in the source data.")
         if _has_mismatch(report_text, metric) and "Keep the direction aligned with the source data." not in improvement_suggestions:
             improvement_suggestions.append("Keep the direction aligned with the source data.")
         return EvaluationResult(
@@ -165,4 +189,24 @@ class EvaluationAgent:
         end = candidate.rfind("}")
         if start == -1 or end == -1 or end <= start:
             raise ValueError("LLM response did not contain JSON")
-        return json.loads(candidate[start : end + 1])
+        snippet = candidate[start : end + 1]
+        try:
+            return json.loads(snippet)
+        except json.JSONDecodeError as exc:
+            fixed = self._repair_json_payload(snippet)
+            try:
+                return json.loads(fixed)
+            except json.JSONDecodeError as second_exc:
+                raise ValueError("LLM response did not contain valid JSON") from second_exc
+
+    def _repair_json_payload(self, payload: str) -> str:
+        system = (
+            "You repair malformed JSON from an LLM judge. "
+            "Return valid JSON only. Do not add markdown fences or commentary."
+        )
+        user = (
+            "Fix this payload so it is valid JSON with the same keys and values:\n"
+            f"{payload}"
+        )
+        result = self._chat(system=system, user=user)
+        return result.content.strip()

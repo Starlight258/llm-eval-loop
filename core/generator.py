@@ -56,8 +56,12 @@ class ReportGenerator:
             "3. ## Interpretation with 2 to 4 sentences\n"
             "4. ## Breakdown with bullets for any provided breakdowns\n"
             "5. ## Watchouts with 1 to 3 bullets\n"
+            "Copy the source numbers exactly in the Snapshot section. Do not scale, round, or renormalize them. "
+            "Keep the current, previous, average, DoD, and WoW values in the same magnitude as the source data.\n"
             "When you describe change, compute the delta from current and previous first and state that delta explicitly. "
+            "Include both the absolute delta and the percent change when relevant, for example 'up by 33,000 (+1.8%)'. "
             "Do not use the full current value as the size of the change.\n"
+            "Do not invent labels like 'Wildcard' or 'new high'. Use the source labels DoD, WoW, and 4W average.\n"
             "Stay grounded, keep the wording cautious when the movement is modest, keep the whole report short, "
             "and never describe a positive WoW/DoD as a decline or a negative WoW/DoD as growth."
         )
